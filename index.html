@@ -1,0 +1,489 @@
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Calculadora do Prestador</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Sora:wght@600;700;800&family=Manrope:wght@400;500;600;700&display=swap">
+<style>
+  :root{
+    --bg-page:#eceef2;
+    --shell-1:#ffffff;
+    --shell-2:#e9ebef;
+    --card-bg:#f4f5f7;
+    --row-line:#e1e3e8;
+    --text:#1c1c1e;
+    --text-dim:#6e7075;
+    --text-faint:#9a9ca1;
+    --accent:#ff9500;
+    --key-bg:#e4e6ea;
+    --key-ink:#3a3c40;
+    --positive:#1f9d55;
+    --warning:#d92d20;
+    --shadow:rgba(30,32,40,0.16);
+    --focus-ring:rgba(255,149,0,0.45);
+  }
+  @media (prefers-color-scheme: dark){
+    :root:not([data-theme="light"]){
+      --bg-page:#0a0a0c;
+      --shell-1:#222226;
+      --shell-2:#1a1a1d;
+      --card-bg:#232226;
+      --row-line:#333338;
+      --text:#f5f5f7;
+      --text-dim:#98989f;
+      --text-faint:#68686f;
+      --accent:#ff9f0a;
+      --key-bg:#3a3a3e;
+      --key-ink:#eceef0;
+      --positive:#32d74b;
+      --warning:#ff453a;
+      --shadow:rgba(0,0,0,0.55);
+      --focus-ring:rgba(255,159,10,0.5);
+    }
+  }
+  :root[data-theme="dark"]{
+    --bg-page:#0a0a0c;
+    --shell-1:#222226;
+    --shell-2:#1a1a1d;
+    --card-bg:#232226;
+    --row-line:#333338;
+    --text:#f5f5f7;
+    --text-dim:#98989f;
+    --text-faint:#68686f;
+    --accent:#ff9f0a;
+    --key-bg:#3a3a3e;
+    --key-ink:#eceef0;
+    --positive:#32d74b;
+    --warning:#ff453a;
+    --shadow:rgba(0,0,0,0.55);
+    --focus-ring:rgba(255,159,10,0.5);
+  }
+  * { box-sizing:border-box; }
+  html,body{ margin:0; padding:0; }
+  body{
+    background:
+      radial-gradient(ellipse 900px 600px at 50% -10%, color-mix(in srgb, var(--accent) 7%, transparent), transparent 60%),
+      var(--bg-page);
+    color:var(--text);
+    font-family:"Manrope", system-ui, sans-serif;
+    min-height:100vh;
+    display:flex;
+    justify-content:center;
+    align-items:flex-start;
+    padding:40px 16px 64px;
+    transition:padding-bottom 0.2s ease;
+  }
+  body.editing{
+    padding-bottom:45vh;
+  }
+  h1,h2{ text-wrap:balance; }
+
+  .shell{
+    width:100%;
+    max-width:420px;
+    background:linear-gradient(180deg, var(--shell-1), var(--shell-2));
+    border-radius:32px;
+    padding:22px 20px 26px;
+    box-shadow:0 24px 60px -20px var(--shadow), 0 1px 0 rgba(255,255,255,0.04) inset;
+    display:flex;
+    flex-direction:column;
+    gap:18px;
+  }
+
+  .shell-header{
+    display:flex;
+    align-items:center;
+    justify-content:space-between;
+  }
+  .eyebrow{
+    font-size:11px;
+    font-weight:700;
+    letter-spacing:0.14em;
+    text-transform:uppercase;
+    color:var(--text-faint);
+  }
+  .ac-btn{
+    font-family:"Manrope", system-ui, sans-serif;
+    font-weight:700;
+    font-size:13px;
+    letter-spacing:0.03em;
+    color:var(--key-ink);
+    background:var(--key-bg);
+    border:none;
+    width:44px;
+    height:44px;
+    border-radius:50%;
+    cursor:pointer;
+    transition:transform 0.12s ease, filter 0.12s ease;
+  }
+  .ac-btn:hover{ filter:brightness(0.94); }
+  .ac-btn:active{ transform:scale(0.94); }
+  .ac-btn:focus-visible{ outline:3px solid var(--focus-ring); outline-offset:2px; }
+
+  .display{
+    display:flex;
+    flex-direction:column;
+    align-items:flex-end;
+    gap:6px;
+    padding:4px 4px 8px;
+  }
+  .display-label{
+    font-size:12px;
+    font-weight:600;
+    letter-spacing:0.04em;
+    color:var(--text-dim);
+  }
+  .display-value{
+    font-family:"Sora", system-ui, sans-serif;
+    font-weight:800;
+    font-size:clamp(2.1rem, 9vw, 2.9rem);
+    line-height:1.05;
+    color:var(--accent);
+    font-variant-numeric:tabular-nums;
+    word-break:break-word;
+    text-align:right;
+  }
+  .display-status{
+    font-size:12.5px;
+    font-weight:600;
+    padding:3px 10px;
+    border-radius:100px;
+    background:color-mix(in srgb, var(--positive) 14%, transparent);
+    color:var(--positive);
+  }
+  .display-status.is-over{
+    background:color-mix(in srgb, var(--warning) 14%, transparent);
+    color:var(--warning);
+  }
+
+  .divider{
+    height:1px;
+    background:var(--row-line);
+    border:none;
+    margin:0;
+  }
+
+  .results{
+    display:flex;
+    flex-direction:column;
+  }
+  .result-row{
+    display:flex;
+    justify-content:space-between;
+    align-items:baseline;
+    padding:9px 2px;
+    border-bottom:1px solid var(--row-line);
+    font-size:14.5px;
+  }
+  .result-row:last-child{ border-bottom:none; }
+  .result-row .label{ color:var(--text-dim); }
+  .result-row .value{
+    font-variant-numeric:tabular-nums;
+    font-weight:600;
+    color:var(--text);
+  }
+  .result-row .value.is-over{ color:var(--warning); }
+  .result-row .value.is-zero{ color:var(--text-faint); font-weight:500; }
+
+  .card{
+    background:var(--card-bg);
+    border-radius:20px;
+    padding:6px 16px;
+  }
+  .card-title{
+    font-size:11px;
+    font-weight:700;
+    letter-spacing:0.12em;
+    text-transform:uppercase;
+    color:var(--text-faint);
+    padding:12px 2px 4px;
+  }
+  .row{
+    display:flex;
+    justify-content:space-between;
+    align-items:center;
+    gap:12px;
+    padding:11px 2px;
+    border-bottom:1px solid var(--row-line);
+    scroll-margin-block:30vh;
+  }
+  .row:last-child{ border-bottom:none; }
+  .row label{
+    font-size:14.5px;
+    color:var(--text);
+    font-weight:500;
+  }
+  .row .hint{
+    display:block;
+    font-size:11.5px;
+    font-weight:400;
+    color:var(--text-faint);
+    margin-top:2px;
+  }
+  .field{
+    display:flex;
+    align-items:center;
+    gap:5px;
+    flex-shrink:0;
+  }
+  .field .unit{
+    font-size:13px;
+    color:var(--text-faint);
+    font-weight:600;
+  }
+  .field input{
+    width:84px;
+    text-align:right;
+    background:transparent;
+    border:none;
+    color:var(--text);
+    font-family:"Manrope", system-ui, sans-serif;
+    font-size:15.5px;
+    font-weight:600;
+    font-variant-numeric:tabular-nums;
+    padding:4px 2px;
+    border-radius:8px;
+  }
+  .field input:focus{
+    outline:none;
+    background:color-mix(in srgb, var(--accent) 12%, transparent);
+  }
+  .field input:focus-visible{
+    box-shadow:0 0 0 2px var(--focus-ring);
+  }
+  .field .readonly-value{
+    width:84px;
+    text-align:right;
+    font-size:15.5px;
+    font-weight:600;
+    color:var(--text-dim);
+    font-variant-numeric:tabular-nums;
+    padding:4px 2px;
+  }
+
+  @media (prefers-reduced-motion: reduce){
+    *{ transition:none !important; }
+  }
+</style>
+
+<div class="shell">
+  <div class="shell-header">
+    <span class="eyebrow">Calculadora do prestador</span>
+    <button class="ac-btn" id="btnReset" type="button" aria-label="Limpar todos os campos">AC</button>
+  </div>
+
+  <div class="display">
+    <span class="display-label">Valor associação</span>
+    <span class="display-value" id="outValorAssociacao">R&#160;0,00</span>
+    <span class="display-status" id="statusBadge">Dentro do plano contratado</span>
+  </div>
+
+  <hr class="divider">
+
+  <div class="results">
+    <div class="result-row">
+      <span class="label">Km Total</span>
+      <span class="value" id="outKmTotal">0 km</span>
+    </div>
+    <div class="result-row">
+      <span class="label">Valor aproximado</span>
+      <span class="value" id="outValorAprox">R$ 0,00</span>
+    </div>
+    <div class="result-row">
+      <span class="label">Km Excedente</span>
+      <span class="value" id="outKmExcedente">0 km</span>
+    </div>
+    <div class="result-row">
+      <span class="label">Valor Excedente</span>
+      <span class="value" id="outValorExcedente">R$ 0,00</span>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-title">Distâncias</div>
+
+    <div class="row">
+      <label for="inPlano">Plano do associado</label>
+      <div class="field">
+        <input type="text" id="inPlano" value="1000" inputmode="decimal">
+        <span class="unit">km</span>
+      </div>
+    </div>
+
+    <div class="row">
+      <label for="inKmOD">Km Origem/Destino</label>
+      <div class="field">
+        <input type="text" id="inKmOD" value="180" inputmode="decimal">
+        <span class="unit">km</span>
+      </div>
+    </div>
+
+    <div class="row">
+      <label>Total Origem/Destino</label>
+      <div class="field">
+        <span class="readonly-value" id="outTotalOD">360</span>
+        <span class="unit">km</span>
+      </div>
+    </div>
+
+    <div class="row">
+      <label for="inBase">Base prestador</label>
+      <div class="field">
+        <input type="text" id="inBase" value="37.5" inputmode="decimal">
+        <span class="unit">km</span>
+      </div>
+    </div>
+
+    <div class="row">
+      <div>
+        <label for="inSaidaKm">Saída km</label>
+        <span class="hint">km cobertos pelo valor de saída</span>
+      </div>
+      <div class="field">
+        <input type="text" id="inSaidaKm" value="40" inputmode="decimal">
+        <span class="unit">km</span>
+      </div>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-title">Valores</div>
+
+    <div class="row">
+      <label for="inValorKm">Valor km</label>
+      <div class="field">
+        <span class="unit">R$</span>
+        <input type="text" id="inValorKm" value="3.85" inputmode="decimal">
+      </div>
+    </div>
+
+    <div class="row">
+      <label for="inValorSaida">Valor saída</label>
+      <div class="field">
+        <span class="unit">R$</span>
+        <input type="text" id="inValorSaida" value="180" inputmode="decimal">
+      </div>
+    </div>
+
+    <div class="row">
+      <label for="inPedagio">Pedágio</label>
+      <div class="field">
+        <span class="unit">R$</span>
+        <input type="text" id="inPedagio" value="0" inputmode="decimal">
+      </div>
+    </div>
+
+    <div class="row">
+      <label for="inHT">HT</label>
+      <div class="field">
+        <span class="unit">R$</span>
+        <input type="text" id="inHT" value="0" inputmode="decimal">
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+  const DEFAULTS = {
+    inPlano: 1000, inKmOD: 180, inBase: 37.5, inSaidaKm: 40,
+    inValorKm: 3.85, inValorSaida: 180, inPedagio: 0, inHT: 0
+  };
+
+  function num(id, fallback){
+    const el = document.getElementById(id);
+    const v = parseFloat(el.value.replace(',', '.'));
+    return Number.isFinite(v) ? v : fallback;
+  }
+
+  function fmtKm(n){
+    return n.toLocaleString('pt-BR', { minimumFractionDigits:0, maximumFractionDigits:2 }) + ' km';
+  }
+  function fmtBRL(n){
+    return 'R$ ' + n.toLocaleString('pt-BR', { minimumFractionDigits:2, maximumFractionDigits:2 });
+  }
+
+  function recalc(){
+    const plano = num('inPlano', 0);
+    const kmOD = num('inKmOD', 0);
+    const base = num('inBase', 0);
+    const saidaKm = num('inSaidaKm', 40);
+    const valorKm = num('inValorKm', 0);
+    const valorSaida = num('inValorSaida', 0);
+    const pedagio = num('inPedagio', 0);
+    const ht = num('inHT', 0);
+
+    const totalOD = kmOD * 2;
+    const kmTotal = totalOD + base * 2;
+    const valorAprox = Math.max(0, kmTotal - saidaKm) * valorKm + valorSaida + pedagio + ht;
+    const kmExcedente = Math.max(0, (totalOD + base) - plano);
+    const valorExcedente = kmExcedente * valorKm;
+    const valorAssociacao = valorAprox - valorExcedente;
+
+    document.getElementById('outTotalOD').textContent = fmtKm(totalOD).replace(' km', '');
+    document.getElementById('outKmTotal').textContent = fmtKm(kmTotal);
+    document.getElementById('outValorAprox').textContent = fmtBRL(valorAprox);
+
+    const kmExcEl = document.getElementById('outKmExcedente');
+    kmExcEl.textContent = fmtKm(kmExcedente);
+    kmExcEl.classList.toggle('is-over', kmExcedente > 0);
+    kmExcEl.classList.toggle('is-zero', kmExcedente === 0);
+
+    const valExcEl = document.getElementById('outValorExcedente');
+    valExcEl.textContent = fmtBRL(valorExcedente);
+    valExcEl.classList.toggle('is-over', valorExcedente > 0);
+    valExcEl.classList.toggle('is-zero', valorExcedente === 0);
+
+    document.getElementById('outValorAssociacao').textContent = fmtBRL(valorAssociacao);
+
+    const badge = document.getElementById('statusBadge');
+    if (kmExcedente > 0){
+      badge.textContent = `Excedente de ${fmtKm(kmExcedente)} sobre o plano`;
+      badge.classList.add('is-over');
+    } else {
+      badge.textContent = 'Dentro do plano contratado';
+      badge.classList.remove('is-over');
+    }
+  }
+
+  function centerField(el){
+    requestAnimationFrame(() => el.scrollIntoView({ block: 'center', behavior: 'smooth' }));
+  }
+
+  document.querySelectorAll('.card input[type="text"]').forEach(el => {
+    el.addEventListener('input', recalc);
+    el.addEventListener('mouseup', (e) => e.preventDefault());
+    el.addEventListener('focus', () => {
+      el.select();
+      document.body.classList.add('editing');
+      centerField(el);
+    });
+    el.addEventListener('blur', () => {
+      document.body.classList.remove('editing');
+      if (el.value.trim() === '') {
+        el.value = el.id === 'inSaidaKm' ? 40 : 0;
+        recalc();
+      }
+    });
+  });
+
+  if (window.visualViewport){
+    window.visualViewport.addEventListener('resize', () => {
+      const active = document.activeElement;
+      if (document.body.classList.contains('editing') && active && active.tagName === 'INPUT'){
+        centerField(active);
+      }
+    });
+  }
+
+  document.getElementById('btnReset').addEventListener('click', () => {
+    Object.entries(DEFAULTS).forEach(([id, val]) => {
+      const el = document.getElementById(id);
+      if (['inPlano','inKmOD','inBase','inValorKm','inValorSaida','inPedagio','inHT'].includes(id)){
+        el.value = 0;
+      } else {
+        el.value = val;
+      }
+    });
+    recalc();
+  });
+
+  recalc();
+</script>
