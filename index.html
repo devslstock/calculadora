@@ -182,6 +182,7 @@
   }
   .result-row .value.is-over{ color:var(--warning); }
   .result-row .value.is-zero{ color:var(--text-faint); font-weight:500; }
+  .result-row .value.value-positive{ color:var(--positive); }
 
   .card{
     background:var(--card-bg);
@@ -284,8 +285,12 @@
       <span class="value" id="outKmTotal">0 km</span>
     </div>
     <div class="result-row">
+      <span class="label">Valor terra</span>
+      <span class="value" id="outValorTerra">R$ 0,00</span>
+    </div>
+    <div class="result-row">
       <span class="label">Valor associação</span>
-      <span class="value" id="outValorAssociacao">R$ 0,00</span>
+      <span class="value value-positive" id="outValorAssociacao">R$ 0,00</span>
     </div>
     <div class="result-row">
       <span class="label">Km Excedente</span>
@@ -334,6 +339,17 @@
 
     <div class="row">
       <div>
+        <label for="inKmTerra">Estrada de terra</label>
+        <span class="hint">km de chão dentro do Km Total, cobrados à parte</span>
+      </div>
+      <div class="field">
+        <input type="text" id="inKmTerra" value="0" inputmode="decimal">
+        <span class="unit">km</span>
+      </div>
+    </div>
+
+    <div class="row">
+      <div>
         <label for="inSaidaKm">Saída km</label>
         <span class="hint">km cobertos pelo valor de saída</span>
       </div>
@@ -356,6 +372,14 @@
     </div>
 
     <div class="row">
+      <label for="inValorKmTerra">Valor km terra</label>
+      <div class="field">
+        <span class="unit">R$</span>
+        <input type="text" id="inValorKmTerra" value="0" inputmode="decimal">
+      </div>
+    </div>
+
+    <div class="row">
       <label for="inValorSaida">Valor saída</label>
       <div class="field">
         <span class="unit">R$</span>
@@ -372,10 +396,18 @@
     </div>
 
     <div class="row">
-      <label for="inHT">HT</label>
+      <label for="inHT">Hora trabalhada</label>
       <div class="field">
         <span class="unit">R$</span>
         <input type="text" id="inHT" value="0" inputmode="decimal">
+      </div>
+    </div>
+
+    <div class="row">
+      <label for="inHP">Hora parada</label>
+      <div class="field">
+        <span class="unit">R$</span>
+        <input type="text" id="inHP" value="0" inputmode="decimal">
       </div>
     </div>
   </div>
@@ -383,8 +415,8 @@
 
 <script>
   const DEFAULTS = {
-    inPlano: 1000, inKmOD: 180, inBase: 37.5, inSaidaKm: 40,
-    inValorKm: 3.85, inValorSaida: 180, inPedagio: 0, inHT: 0
+    inPlano: 1000, inKmOD: 180, inBase: 37.5, inKmTerra: 0, inSaidaKm: 40,
+    inValorKm: 3.85, inValorKmTerra: 0, inValorSaida: 180, inPedagio: 0, inHT: 0, inHP: 0
   };
 
   function num(id, fallback){
@@ -404,15 +436,20 @@
     const plano = num('inPlano', 0);
     const kmOD = num('inKmOD', 0);
     const base = num('inBase', 0);
+    const kmTerra = num('inKmTerra', 0);
     const saidaKm = num('inSaidaKm', 40);
     const valorKm = num('inValorKm', 0);
+    const valorKmTerra = num('inValorKmTerra', 0);
     const valorSaida = num('inValorSaida', 0);
     const pedagio = num('inPedagio', 0);
     const ht = num('inHT', 0);
+    const hp = num('inHP', 0);
 
     const totalOD = kmOD * 2;
     const kmTotal = totalOD + base * 2;
-    const valorAprox = Math.max(0, kmTotal - saidaKm) * valorKm + valorSaida + pedagio + ht;
+    const kmAsfalto = Math.max(0, kmTotal - kmTerra);
+    const valorTerra = kmTerra * valorKmTerra;
+    const valorAprox = Math.max(0, kmAsfalto - saidaKm) * valorKm + valorTerra + valorSaida + pedagio + ht + hp;
     const kmExcedente = Math.max(0, (totalOD + base) - plano);
     const valorExcedente = kmExcedente * valorKm;
     const valorAssociacao = valorAprox - valorExcedente;
@@ -420,6 +457,7 @@
     document.getElementById('outTotalOD').textContent = fmtKm(totalOD).replace(' km', '');
     document.getElementById('outKmTotal').textContent = fmtKm(kmTotal);
     document.getElementById('outValorAprox').textContent = fmtBRL(valorAprox);
+    document.getElementById('outValorTerra').textContent = fmtBRL(valorTerra);
 
     const kmExcEl = document.getElementById('outKmExcedente');
     kmExcEl.textContent = fmtKm(kmExcedente);
@@ -476,7 +514,7 @@
   document.getElementById('btnReset').addEventListener('click', () => {
     Object.entries(DEFAULTS).forEach(([id, val]) => {
       const el = document.getElementById(id);
-      if (['inPlano','inKmOD','inBase','inValorKm','inValorSaida','inPedagio','inHT'].includes(id)){
+      if (['inPlano','inKmOD','inBase','inKmTerra','inValorKm','inValorKmTerra','inValorSaida','inPedagio','inHT','inHP'].includes(id)){
         el.value = 0;
       } else {
         el.value = val;
