@@ -1866,6 +1866,7 @@ body .metric span{display:inline!important;white-space:nowrap}
  const needsProvider=p=>{const s=getSits(p);return s.includes('PROCURAR PRESTADOR')||s.includes('AGUARDANDO ENDEREÇO')||colOf(p)==='Localizando Prestador'};
  const repasseHeader=p=>needsProvider(p)?'⚠️ BUSCAR PRESTADOR':'📌 PARA ACOMPANHAR';
  const SEP='----------------';
+ const canArrive=p=>colOf(p)==='Prestador a Caminho';
  const canFindProvider=p=>colOf(p)==='Localizando Prestador'||(colOf(p)==='Repasse'&&needsProvider(p));
  const repasseBlock=p=>SEP+'\n'+repasseHeader(p)+'\n\n'+repasseLines(p,true).map(([k,v])=>(k+': '+v).trimEnd()).join('\n');
  const repasseText=p=>repasseBlock(p)+'\n'+SEP;
@@ -1934,7 +1935,7 @@ body .metric span{display:inline!important;white-space:nowrap}
  function cardHtml(p){
   const d=p.dueAt?dueText(p.dueAt):null;
   const lines=repasseLines(p).map(([k,v])=>k==='SITUAÇÃO'?'':k==='PROTOCOLO'?`<div class="bcard-num">${esc(v)}</div>`:k==='ASSOCIADO'?`<div>${esc(v)}</div>`:`<div><b>${k}:</b> ${esc(v)}</div>`).join('')+(getSits(p).length?`<div class="bcard-sits">${getSits(p).map(x=>`<span class="bcard-sit">${esc(x)}</span>`).join('')}</div>`:'');
-  return `<article class="bcard" draggable="true" data-id="${esc(p.id)}">${p.responsavel?`<div class="bcard-tags"><span class="btag" style="background:${tagColor(p.responsavel)}">${esc(p.responsavel)}</span></div>`:''}<div class="bcard-lines">${lines}</div><div class="bcard-meta"><span>☑ ${doneCount(p)}/${TOTAL}</span>${p.dueAt?`<span class="bdue ${d.late?'late':''}" data-due="${esc(p.dueAt)}">${d.t}</span>`:''}${p.providerEtaDeadline&&colOf(p)==='Prestador a Caminho'?(()=>{const e=dueText(p.providerEtaDeadline);return `<span class="bdue ${e.late?'late':''}" data-due="${esc(p.providerEtaDeadline)}" data-ico="🚚" title="Prévia de chegada do prestador">${e.late?'🚚 PRÉVIA VENCIDA':e.t.replace('⏱','🚚')}</span>`})():''}</div>${canFindProvider(p)?`<button type="button" class="bcard-act primary" data-found="${esc(p.id)}">✔ Prestador localizado</button>`:''}</article>`;
+  return `<article class="bcard" draggable="true" data-id="${esc(p.id)}">${p.responsavel?`<div class="bcard-tags"><span class="btag" style="background:${tagColor(p.responsavel)}">${esc(p.responsavel)}</span></div>`:''}<div class="bcard-lines">${lines}</div><div class="bcard-meta"><span>☑ ${doneCount(p)}/${TOTAL}</span>${p.dueAt?`<span class="bdue ${d.late?'late':''}" data-due="${esc(p.dueAt)}">${d.t}</span>`:''}${p.providerEtaDeadline&&colOf(p)==='Prestador a Caminho'?(()=>{const e=dueText(p.providerEtaDeadline);return `<span class="bdue ${e.late?'late':''}" data-due="${esc(p.providerEtaDeadline)}" data-ico="🚚" title="Prévia de chegada do prestador">${e.late?'🚚 PRÉVIA VENCIDA':e.t.replace('⏱','🚚')}</span>`})():''}</div>${canFindProvider(p)?`<button type="button" class="bcard-act primary" data-found="${esc(p.id)}">✔ Prestador localizado</button>`:''}${canArrive(p)?`<button type="button" class="bcard-act primary" data-arrived="${esc(p.id)}">📍 Marcar chegada</button>`:''}</article>`;
  }
  function renderBoard(){
   const host=g('boardHost');if(!host||typeof db==='undefined'||!db||!Array.isArray(db.protocols))return;
@@ -1967,7 +1968,7 @@ body .metric span{display:inline!important;white-space:nowrap}
   if(!p||!colOf(p)){closeModal();return}
   ensure(p);
   const contactsHtml=(p.contatos||[]).map((c,j)=>`<div class="bm-contact"><span><b>${esc(c.papel||'Contato')}:</b> ${esc(c.nome)} ${esc(c.telefone)}</span><button type="button" data-rmc="${j}">✕</button></div>`).join('');
-  const info=[['Associado',p.associado],['Telefone',p.telefoneAssociado],['Placa',p.placa],['Motivo',p.motivo||p.servico],['Prestador',p.prestador],['Tel. prestador',p.telefonePrestador],['Valor',p.valor],['Pagamento',p.formaPagamento],['Prévia',p.agenda]].filter(x=>x[1]);
+  const info=[['Associado',p.associado],['Telefone',p.telefoneAssociado],['Placa',p.placa],['Motivo',p.motivo||p.servico],['Prestador',p.prestador],['Tel. prestador',p.telefonePrestador],['Valor',p.valor],['Pagamento',p.formaPagamento],['Prévia',p.agenda],['Chegada',p.chegadaEm?fmtDate(p.chegadaEm):'']].filter(x=>x[1]);
   g('boardModalBody').innerHTML=`<div class="bm-head"><div><h2>${esc(title(p))}</h2><p class="help">${esc(p.associacao||'Sem associação')}</p></div><button type="button" id="bmClose">✕</button></div>
   <div class="bm-info">${info.map(([k,v])=>`<div><b>${k}:</b> ${esc(v)}</div>`).join('')}${p.pendencias?`<div class="wide"><b>Pendências:</b> ${esc(p.pendencias)}</div>`:''}${p.dueAt?`<div class="wide"><b>Prazo:</b> ${esc(fmtDate(p.dueAt))}</div>`:''}</div>
   ${window.protBoxHtml?window.protBoxHtml(p):''}
@@ -1975,7 +1976,7 @@ body .metric span{display:inline!important;white-space:nowrap}
   <div class="bm-row"><div><label for="bmMove">Lista</label><select id="bmMove">${COLS.map(c=>`<option ${c===colOf(p)?'selected':''}>${esc(c)}</option>`).join('')}</select></div><div><label for="bmResp">Responsável (etiqueta)</label><input id="bmResp" value="${esc(p.responsavel||'')}"></div></div>
   <div class="bm-sits"><strong>Situação</strong> <span class="help">(clique para marcar ou desmarcar)</span><div class="chips">${chipsFor(p)}</div><div class="bm-oth"><input id="bmOther" placeholder="Outra situação…" autocomplete="off"><button type="button" id="bmOtherAdd">＋ Adicionar</button></div></div>
   ${CHECKS.map(c=>{const arr=p.checklists[c.key],n=arr.filter(Boolean).length,pct=Math.round(n/arr.length*100);return `<section class="bm-check"><div class="bm-check-head"><strong>${esc(c.title)}</strong><span class="help">${n}/${arr.length}</span></div><div class="bm-bar"><i style="width:${pct}%"></i></div>${c.items.map((t,i)=>`<label class="bm-item ${arr[i]?'done':''}"><input type="checkbox" data-ck="${c.key}" data-i="${i}" ${arr[i]?'checked':''}> ${esc(t)}</label>`).join('')}</section>`}).join('')}
-  <div class="row bm-actions">${canFindProvider(p)?`<button type="button" class="primary" data-found="${esc(p.id)}">✔ Prestador localizado</button>`:''}<button type="button" id="bmCopy">📋 Copiar repasse</button><button type="button" data-action="edit" data-id="${esc(p.id)}">✎ Editar dados</button><button type="button" data-action="attach" data-id="${esc(p.id)}">📎 Anexos</button><button type="button" data-action="protocol-history" data-id="${esc(p.id)}">🕘 Histórico</button><button type="button" data-action="pdf-protocol" data-id="${esc(p.id)}">📑 PDF</button></div>`;
+  <div class="row bm-actions">${canArrive(p)?`<button type="button" class="primary" data-arrived="${esc(p.id)}">📍 Marcar chegada</button>`:''}${canFindProvider(p)?`<button type="button" class="primary" data-found="${esc(p.id)}">✔ Prestador localizado</button>`:''}<button type="button" id="bmCopy">📋 Copiar repasse</button><button type="button" data-action="edit" data-id="${esc(p.id)}">✎ Editar dados</button><button type="button" data-action="attach" data-id="${esc(p.id)}">📎 Anexos</button><button type="button" data-action="protocol-history" data-id="${esc(p.id)}">🕘 Histórico</button><button type="button" data-action="pdf-protocol" data-id="${esc(p.id)}">📑 PDF</button></div>`;
   g('boardModal').classList.remove('hidden');
  }
  function openModal(id){openId=id;renderModal()}
@@ -2872,4 +2873,26 @@ body .metric span{display:inline!important;white-space:nowrap}
 })();
 </script>
 
+<script>
+/* V62: "Marcar chegada" — registra a chegada do prestador e leva o cartão para "Prestador no Local". */
+(function(){
+ document.addEventListener('click',e=>{
+  const b=e.target.closest('[data-arrived]');if(!b)return;
+  e.stopPropagation();e.preventDefault();
+  if(window.closeBoardModal)window.closeBoardModal();
+  const p=db.protocols.find(x=>x.id===b.dataset.arrived);if(!p)return;
+  p.checklists=p.checklists||{};
+  if(!Array.isArray(p.checklists.chegada)||p.checklists.chegada.length!==4)p.checklists.chegada=[false,false,false,false];
+  p.checklists.chegada[0]=true;
+  p.chegadaTask='Feito';p.chegadaEm=now();
+  const sits=getSits(p).filter(x=>x!=='PRESTADOR A CAMINHO'&&x!=='MARCAR CHEGADA');
+  if(!sits.includes('ANEXAR: FOTOS CHEGADA'))sits.unshift('ANEXAR: FOTOS CHEGADA');
+  setSits(p,sits);
+  p.updatedAt=now();
+  log(p.id,p.numero,'Chegada marcada',(p.prestador||'Prestador')+' no local');
+  boardMove(p,'Prestador no Local');
+  toast('📍 Chegada marcada. Cartão em “Prestador no Local”.');
+ },true);
+})();
+</script>
 </body></html>
