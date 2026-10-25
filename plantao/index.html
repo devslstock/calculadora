@@ -698,7 +698,7 @@ body[data-theme] .protocol.has-suggestion{border-color:rgba(238,151,58,.82);box-
   </div>
  </section>
  <p class="footer-note" style="text-align:center">© 2026 SL Stock. Todos os direitos reservados.<br>Desenvolvido pela <a href="https://www.sldev.com.br/" target="_blank" rel="noopener">SL Desenvolvimentos</a></p>
-</main><div id="stalledModal" class="stalled-backdrop hidden" role="dialog" aria-modal="true"><div class="stalled-dialog"><div class="stalled-icon">⏰</div><h2>Protocolo sem atualização</h2><p id="stalledProtocolLabel"></p><p>O tempo de acompanhamento terminou. Confira o atendimento.</p><div class="row" style="justify-content:center"><button id="stalledDismiss">Visualizar depois</button><button id="stalledReset" class="primary">Reiniciar 20 min</button><button id="stalledChange">Alterar prazo</button></div></div></div><div id="attachmentsModal" class="stalled-backdrop hidden" role="dialog" aria-modal="true"><div class="stalled-dialog" style="max-width:620px;text-align:left"><h2 id="attachmentsTitle">Anexos do protocolo</h2><p class="help">Arquivos armazenados na pasta dados/anexos do computador. Faça backup dessa pasta também.</p><input id="attachmentInput" type="file" accept="image/*,.pdf,.doc,.docx,.xlsx,.txt" multiple><div id="attachmentList" style="margin:14px 0"></div><button id="attachmentClose">Fechar</button></div></div><div id="paymentModal" class="payment-modal hidden" role="dialog" aria-modal="true" aria-labelledby="paymentModalTitle">
+</main><div id="stalledModal" class="stalled-backdrop hidden" role="dialog" aria-modal="true"><div class="stalled-dialog"><div class="stalled-icon">⏰</div><h2>Protocolo sem atualização</h2><p id="stalledProtocolLabel"></p><p id="stalledMsg">O tempo de acompanhamento terminou. Confira o atendimento.</p><div class="row" style="justify-content:center"><button id="stalledDismiss">Visualizar depois</button><button id="stalledReset" class="primary">Reiniciar 20 min</button><button id="stalledChange">Alterar prazo</button></div></div></div><div id="attachmentsModal" class="stalled-backdrop hidden" role="dialog" aria-modal="true"><div class="stalled-dialog" style="max-width:620px;text-align:left"><h2 id="attachmentsTitle">Anexos do protocolo</h2><p class="help">Arquivos armazenados na pasta dados/anexos do computador. Faça backup dessa pasta também.</p><input id="attachmentInput" type="file" accept="image/*,.pdf,.doc,.docx,.xlsx,.txt" multiple><div id="attachmentList" style="margin:14px 0"></div><button id="attachmentClose">Fechar</button></div></div><div id="paymentModal" class="payment-modal hidden" role="dialog" aria-modal="true" aria-labelledby="paymentModalTitle">
 <div class="payment-dialog"><h2 id="paymentModalTitle">Pagamento</h2><p id="paymentModalIntro"></p><div id="paymentModalBody"></div><div id="paymentModalActions" class="payment-actions"></div></div></div>
 
 <div id="toast" class="toast"></div>
@@ -2912,6 +2912,101 @@ body .metric span{display:inline!important;white-space:nowrap}
   boardMove(p,'Prestador no Local');
   toast('📍 Chegada marcada. Cartão em “Prestador no Local”.');
  },true);
+})();
+</script>
+<script>
+/* V63: alerta "Protocolo sem atualização" só em dois casos:
+   1) ainda sem prestador e o prazo de procura terminou;
+   2) a prévia do prestador (a caminho) terminou. */
+(function(){
+ const g=id=>document.getElementById(id);
+ const KEY='plantao_alertados';
+ const FAR=()=>Date.now()+1e12;
+ const baseActive=window.timerActive;
+ const hasProvider=p=>!!String(p.prestador||'').trim();
+
+ // Prazo que realmente interessa para o alerta; null = este protocolo não alerta.
+ function relevantDeadline(p){
+  if(!baseActive(p))return null;
+  const c=window.boardColOf?window.boardColOf(p):null;
+  if(c==='Prestador a Caminho'){const t=p.providerEtaDeadline?Date.parse(p.providerEtaDeadline):NaN;return Number.isFinite(t)?t:null}
+  if((c==='Localizando Prestador'||c==='Repasse')&&!hasProvider(p)){
+   const t=p.dueAt?Date.parse(p.dueAt):(p.timerDeadline?Date.parse(p.timerDeadline):NaN);
+   return Number.isFinite(t)?t:null;
+  }
+  return null;
+ }
+ const kindOf=p=>(window.boardColOf&&window.boardColOf(p)==='Prestador a Caminho')?'previa':'prestador';
+ window.timerActive=p=>relevantDeadline(p)!==null;
+ window.timerDeadline=p=>{const d=relevantDeadline(p);return d===null?FAR():d};
+
+ // cada navegador avisa uma vez por prazo
+ let alerted=new Set();try{alerted=new Set(JSON.parse(localStorage.getItem(KEY)||'[]'))}catch(e){}
+ const remember=k=>{alerted.add(k);try{localStorage.setItem(KEY,JSON.stringify([...alerted].slice(-300)))}catch(e){}};
+
+ window.refreshTimers=function(){
+  const now=Date.now();
+  for(const p of db.protocols){
+   for(const el of document.querySelectorAll('[data-timer-clock="'+CSS.escape(p.id)+'"]')){
+    const strip=el.closest('.timer-strip'),d=relevantDeadline(p);
+    if(d===null){strip.style.display='none';continue}
+    strip.style.display='';
+    const left=d-now,sec=Math.max(0,Math.ceil(left/1000));
+    el.textContent=left<=0?'00:00':String(Math.floor(sec/60)).padStart(2,'0')+':'+String(sec%60).padStart(2,'0');
+    strip.classList.toggle('timer-overdue',left<=0);
+   }
+   const d=relevantDeadline(p);
+   if(d!==null&&d<=now){
+    const k=p.id+'|'+kindOf(p)+'|'+d;
+    if(!alerted.has(k)){remember(k);alertQueue.push(p.id)}
+   }
+  }
+  if(!alertOpenId&&alertQueue.length)window.showNextStalled();
+ };
+
+ window.showNextStalled=function(){
+  while(alertQueue.length){
+   const id=alertQueue.shift(),p=db.protocols.find(x=>x.id===id);
+   if(!p||relevantDeadline(p)===null||relevantDeadline(p)>Date.now())continue;
+   alertOpenId=id;
+   const prev=kindOf(p)==='previa';
+   g('stalledProtocolLabel').textContent='Protocolo '+p.numero+' · '+(p.associacao||'Sem associação')+(p.prestador?' · '+p.prestador:'');
+   g('stalledMsg').textContent=prev?'A prévia do prestador terminou. Confira a chegada.':'Ainda sem prestador e o prazo de procura terminou.';
+   g('stalledReset').textContent=prev?'📍 Prestador chegou':'Reiniciar 30 min';
+   g('stalledChange').textContent=prev?'Nova prévia':'Alterar prazo';
+   g('stalledModal').classList.remove('hidden');
+   return;
+  }
+ };
+
+ function setMinutes(p,n){
+  if(kindOf(p)==='previa'){
+   const at=new Date(Date.now()+n*60000);
+   p.providerEtaMinutes=n;p.providerEtaDeadline=at.toISOString();
+   log(p.id,p.numero,'Prévia do prestador','Nova prévia em '+n+' minuto(s)');
+  }else{
+   const at=new Date(Date.now()+n*60000).toISOString();
+   if(p.dueAt||(window.boardColOf&&window.boardColOf(p)==='Localizando Prestador'))p.dueAt=at;
+   p.timerMinutes=n;p.timerDeadline=at;
+   log(p.id,p.numero,'Prazo de procura de prestador','Reiniciado para '+n+' minuto(s)');
+  }
+  p.updatedAt=now();persist();
+ }
+ g('stalledReset').onclick=()=>{
+  const p=db.protocols.find(x=>x.id===alertOpenId);if(!p)return;
+  if(kindOf(p)==='previa'){
+   const b=document.createElement('button');b.dataset.arrived=p.id;document.body.appendChild(b);b.click();b.remove();
+  }else setMinutes(p,30);
+  closeStalled();
+ };
+ g('stalledChange').onclick=()=>{
+  const p=db.protocols.find(x=>x.id===alertOpenId);if(!p)return;
+  const prev=kindOf(p)==='previa';
+  const v=prompt(prev?'Nova prévia do prestador, em minutos (1 a 1440):':'Novo prazo de procura, em minutos (1 a 1440):',prev?'15':'30');
+  if(v===null)return;
+  const n=Number(v);
+  if(Number.isInteger(n)&&n>=1&&n<=1440){setMinutes(p,n);closeStalled()}else alert('Informe um número entre 1 e 1440.');
+ };
 })();
 </script>
 </body></html>
