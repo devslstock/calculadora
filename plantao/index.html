@@ -551,7 +551,7 @@ body[data-theme] .protocol.has-suggestion{border-color:rgba(238,151,58,.82);box-
 </header>
 <main><div class="global-search-bar"><label for="globalLookup">⌕ Busca geral (inclui arquivados)</label><input id="globalLookup" placeholder="Protocolo, associado, telefone, placa, prestador..." autocomplete="off"><div id="globalResults" class="global-results hidden"></div></div>
  <nav class="tabs no-print">
-  <button class="tab active" data-tab="quadro">▦ Quadro</button><button class="tab" data-tab="painel">☰ Lista</button><button class="tab" data-tab="importar">📥 Importar mensagens</button><button class="tab" data-tab="novo">＋ Novo protocolo</button><button class="tab" type="button" id="providerRegistryBtn">💳 Prestadores</button><button class="tab" data-tab="historico">Histórico</button><button class="tab" data-tab="passagem">Passagem de turno</button><button class="tab" data-tab="nuvem">☁ Nuvem / sincronização</button>
+  <button class="tab active" data-tab="quadro">▦ Quadro</button><button class="tab" data-tab="painel">☰ Lista</button><button class="tab" data-tab="importar">📥 Importar mensagens</button><button class="tab" data-tab="novo">＋ Novo protocolo</button><button class="tab" data-tab="protecoes">🛡 Proteções</button><button class="tab" type="button" id="providerRegistryBtn">💳 Prestadores</button><button class="tab" data-tab="historico">Histórico</button><button class="tab" data-tab="passagem">Passagem de turno</button><button class="tab" data-tab="nuvem">☁ Nuvem / sincronização</button>
  </nav>
  <div class="archive-strip no-print"><span class="archive-caption">ARQUIVOS</span><button class="tab archive-tab" data-tab="faturados">✓ Finalizado Faturado <span id="billedTabCount"></span></button><button class="tab archive-tab" data-tab="concluidos">✓ Concluídos <span id="archiveTabCount"></span></button><button class="tab archive-tab" data-tab="repassados">↗ Repassados <span id="handoffTabCount"></span></button></div>
  <section id="quadro"><div class="panel"><div class="board-top"><h2>▦ Quadro de atendimentos</h2><div class="row"><select id="boardOwner" title="Filtrar por responsável" style="width:auto"></select><input id="boardSearch" placeholder="Buscar protocolo, associado, placa…" autocomplete="off"><button type="button" id="boardCopy" title="Copia todos os protocolos ativos no formato de repasse">📋 Copiar repasse</button></div></div><div id="boardHost" class="board"></div></div></section>
@@ -638,7 +638,7 @@ body[data-theme] .protocol.has-suggestion{border-color:rgba(238,151,58,.82);box-
    <form id="protocolForm"><input type="hidden" id="editId">
     <div class="fieldgrid">
      <div><label for="fNumero">Número do protocolo *</label><input id="fNumero" required placeholder="Ex.: 2026018612"></div>
-     <div><label for="fAssoc">Associação</label><input id="fAssoc" placeholder="LUCK, PROTEAUTO…"></div>
+     <div><label for="fAssoc">Associação</label><input id="fAssoc" list="protList" placeholder="LUCK, PROTEAUTO…"></div>
      <div><label for="fSolicitante">Solicitante / telefone</label><input id="fSolicitante"></div>
      <div><label for="fAssociado">Associado</label><input id="fAssociado"></div><div><label for="fWhatsappAssociado">Nome do associado no WhatsApp</label><input id="fWhatsappAssociado" placeholder="Como aparece na conversa do WhatsApp"></div>
      <div><label for="fTelefoneAssociado">Telefone do associado</label><input id="fTelefoneAssociado" type="tel" maxlength="15" placeholder="DDD + número"></div><div><label for="fPrestador">Prestador</label><input id="fPrestador"></div><div><label for="fWhatsappPrestador">Nome do prestador no WhatsApp</label><input id="fWhatsappPrestador" placeholder="Como aparece na conversa do WhatsApp"></div>
@@ -669,6 +669,7 @@ body[data-theme] .protocol.has-suggestion{border-color:rgba(238,151,58,.82);box-
    </form>
   </div>
  </section>
+ <section id="protecoes" class="hidden"><div class="panel"><div class="board-top"><h2>🛡 Proteções e regras</h2><button type="button" class="primary" id="prNew">＋ Nova proteção</button></div><p class="help">Cadastre cada proteção e cole o texto das regras. O sistema destaca o que é importante e mostra num popup assim que a proteção é informada no protocolo.</p><div class="prot-layout"><div id="prList"></div><div id="prEditor"></div></div></div></section>
  <section id="historico" class="hidden">
   <div class="panel"><div class="toolbar"><input id="historySearch" placeholder="Filtrar histórico por protocolo ou ação"><button id="clearHistory" class="danger fit">Limpar histórico</button></div><div id="historyList"></div></div>
  </section>
@@ -759,7 +760,7 @@ const $=id=>document.getElementById(id);
 const now=()=>new Date().toISOString();
 const fmtDate=s=>{if(!s)return '—';let d=new Date(s);return isNaN(d)?s:d.toLocaleString('pt-BR',{dateStyle:'short',timeStyle:'short'})};
 function toast(msg){$('toast').textContent=msg;$('toast').style.display='block';setTimeout(()=>$('toast').style.display='none',2600)}
-function load(){try{const raw=localStorage.getItem(DBKEY);if(raw)db=JSON.parse(raw)}catch(e){toast('Não foi possível ler os dados locais. Restaure um backup.')}if(!Array.isArray(db.protocols))db.protocols=[];if(!Array.isArray(db.history))db.history=[];if(!Array.isArray(db.providers))db.providers=[];}
+function load(){try{const raw=localStorage.getItem(DBKEY);if(raw)db=JSON.parse(raw)}catch(e){toast('Não foi possível ler os dados locais. Restaure um backup.')}if(!Array.isArray(db.protocols))db.protocols=[];if(!Array.isArray(db.history))db.history=[];if(!Array.isArray(db.providers))db.providers=[];if(!Array.isArray(db.protecoes))db.protecoes=[];}
 function persist(){for(const p of db.protocols){if(!p.timerDeadline){p.timerMinutes=20;p.timerDeadline=new Date(Date.now()+20*60000).toISOString()}}try{localStorage.setItem(DBKEY,JSON.stringify(db))}catch(e){alert('ERRO ao salvar no navegador: '+e.message);return}render();cloudLocalChanged();saveToComputer()}
 function log(id,numero,acao,detalhe=''){db.history.unshift({id:crypto.randomUUID?crypto.randomUUID():String(Date.now()+Math.random()),protocolId:id,numero,acao,detalhe,at:now()});if(db.history.length>3000)db.history.length=3000}
 function clean(v){return (v||'').toString().trim()}
@@ -1814,6 +1815,7 @@ body .metric span{display:inline!important;white-space:nowrap}
 
 <div id="novoModal" class="bm-back hidden" role="dialog" aria-modal="true"><form class="bm-box bm-form" id="novoForm">
  <div class="bm-head"><div><h2>＋ Novo atendimento</h2><p class="help">Entra em “Localizando Prestador” com prazo de 30 minutos.</p></div><button type="button" id="novoCancel">✕</button></div>
+ <label for="nvProt">Proteção</label><input id="nvProt" list="protList" autocomplete="off" placeholder="Ex.: PROTEAUTO"><datalist id="protList"></datalist>
  <label for="nvNome">Nome do associado *</label><input id="nvNome" required autocomplete="off">
  <label for="nvTel">Telefone</label><input id="nvTel" data-key="telefoneNovo" type="tel" maxlength="15" placeholder="DDD + número" autocomplete="off">
  <label for="nvPlaca">Placa</label><input id="nvPlaca" maxlength="8" placeholder="ABC1D23" autocomplete="off" style="text-transform:uppercase">
@@ -1949,6 +1951,7 @@ body .metric span{display:inline!important;white-space:nowrap}
   const info=[['Associado',p.associado],['Telefone',p.telefoneAssociado],['Placa',p.placa],['Motivo',p.motivo||p.servico],['Prestador',p.prestador],['Tel. prestador',p.telefonePrestador]].filter(x=>x[1]);
   g('boardModalBody').innerHTML=`<div class="bm-head"><div><h2>${esc(title(p))}</h2><p class="help">${esc(p.associacao||'Sem associação')}</p></div><button type="button" id="bmClose">✕</button></div>
   <div class="bm-info">${info.map(([k,v])=>`<div><b>${k}:</b> ${esc(v)}</div>`).join('')}${p.pendencias?`<div class="wide"><b>Pendências:</b> ${esc(p.pendencias)}</div>`:''}${p.dueAt?`<div class="wide"><b>Prazo:</b> ${esc(fmtDate(p.dueAt))}</div>`:''}</div>
+  ${window.protBoxHtml?window.protBoxHtml(p):''}
   <div class="bm-contacts"><strong>Contatos</strong>${contactsHtml}<div class="bm-addc"><input id="bmcNome" placeholder="Nome" autocomplete="off"><input id="bmcTel" data-key="telefoneContato" placeholder="Telefone" maxlength="15" autocomplete="off"><select id="bmcPapel"><option>Solicitante</option><option>Associado</option><option>Prestador</option><option>Outro</option></select><button type="button" id="bmcAdd">＋ Adicionar</button></div></div>
   <div class="bm-row"><div><label for="bmMove">Lista</label><select id="bmMove">${COLS.map(c=>`<option ${c===colOf(p)?'selected':''}>${esc(c)}</option>`).join('')}</select></div><div><label for="bmResp">Responsável (etiqueta)</label><input id="bmResp" value="${esc(p.responsavel||'')}"></div></div>
   <div class="bm-sits"><strong>Situação</strong> <span class="help">(clique para marcar ou desmarcar)</span><div class="chips">${chipsFor(p)}</div><div class="bm-oth"><input id="bmOther" placeholder="Outra situação…" autocomplete="off"><button type="button" id="bmOtherAdd">＋ Adicionar</button></div></div>
@@ -2002,7 +2005,7 @@ body .metric span{display:inline!important;white-space:nowrap}
   const d=new Date(),pad=n=>String(n).padStart(2,'0');
   const p={...blankProtocol(),
    numero:g('nvNum').value.trim()||('NOVO '+pad(d.getDate())+pad(d.getMonth()+1)+'-'+pad(d.getHours())+pad(d.getMinutes())+pad(d.getSeconds())),
-   associado:g('nvNome').value.trim(),telefoneAssociado:g('nvTel').value.trim(),placa:g('nvPlaca').value.trim().toUpperCase(),motivo:g('nvMotivo').value.trim(),
+   associacao:g('nvProt').value.trim(),associado:g('nvNome').value.trim(),telefoneAssociado:g('nvTel').value.trim(),placa:g('nvPlaca').value.trim().toUpperCase(),motivo:g('nvMotivo').value.trim(),
    responsavel:operator(),situacao:'PROCURAR PRESTADOR',situacoes:['PROCURAR PRESTADOR'],coluna:'Localizando Prestador',colAt:Date.now(),dueAt:new Date(Date.now()+30*60000).toISOString(),status:'Em andamento'};
   try{saveProtocol(p,'Novo atendimento')}catch(err){alert(err.message);return}
   persist();closeNovo();tab('quadro');toast('✓ Atendimento criado em “Localizando Prestador” (prazo de 30 min).');
@@ -2180,7 +2183,7 @@ body .metric span{display:inline!important;white-space:nowrap}
  const clone=o=>JSON.parse(JSON.stringify(o));
  const same=(a,b)=>JSON.stringify(a)===JSON.stringify(b);
  const synced=new Map(),syncedHist=new Set();
- let syncedProv='[]',sb=null,me=null,perfil=null,loaded=false,pushing=false,pushAgain=false,pushTimer=null,retryTimer=null,lastSeen='',reconnected=false,channel=null,renderTimer=null;
+ let syncedProv='[]',syncedProt='[]',sb=null,me=null,perfil=null,loaded=false,pushing=false,pushAgain=false,pushTimer=null,retryTimer=null,lastSeen='',reconnected=false,channel=null,renderTimer=null;
 
  // ---------- configuração e biblioteca
  function cfg(){
@@ -2289,12 +2292,14 @@ body .metric span{display:inline!important;white-space:nowrap}
   let local=null;try{local=JSON.parse(localStorage.getItem(DBKEY)||'null')}catch(e){}
   synced.clear();syncedHist.clear();
   if(!pr.data.length&&local&&Array.isArray(local.protocols)&&local.protocols.length&&confirm('A nuvem está vazia e este navegador tem '+local.protocols.length+' protocolo(s) salvos.\n\nEnviar esses protocolos para a nuvem da equipe?')){
-   db={protocols:local.protocols,history:local.history||[],providers:local.providers||[]};
+   db={protocols:local.protocols,history:local.history||[],providers:local.providers||[],protecoes:local.protecoes||[]};
   }else{
-   db={protocols:pr.data.map(r=>{track(r.atualizado_em);const p=toProto(r);synced.set(p.id,clone(p));return p}),history:hi.data.map(h=>{syncedHist.add(h.id);return toHist(h)}),providers:[]};
+   db={protocols:pr.data.map(r=>{track(r.atualizado_em);const p=toProto(r);synced.set(p.id,clone(p));return p}),history:hi.data.map(h=>{syncedHist.add(h.id);return toHist(h)}),providers:[],protecoes:[]};
    db.protocols.sort((a,b)=>String(b.createdAt||'').localeCompare(String(a.createdAt||'')));
    const prov=kv.data.find(x=>x.chave==='providers');
    db.providers=Array.isArray(prov?.valor)?prov.valor:[];syncedProv=JSON.stringify(db.providers);
+   const prt=kv.data.find(x=>x.chave==='protecoes');
+   db.protecoes=Array.isArray(prt?.valor)?prt.valor:[];syncedProt=JSON.stringify(db.protecoes);
   }
   cache();
   loaded=true;computerReady=true;computerOverlay.remove();
@@ -2356,6 +2361,11 @@ body .metric span{display:inline!important;white-space:nowrap}
      const {error}=await sb.from('kv').upsert({chave:'providers',valor:db.providers||[],atualizado_em:new Date().toISOString()});if(error)throw error;
      syncedProv=prov;
     }
+    const prt=JSON.stringify(db.protecoes||[]);
+    if(prt!==syncedProt){
+     const {error}=await sb.from('kv').upsert({chave:'protecoes',valor:db.protecoes||[],atualizado_em:new Date().toISOString()});if(error)throw error;
+     syncedProt=prt;
+    }
    }while(pushAgain);
    clearTimeout(retryTimer);okStatus();
   }catch(e){
@@ -2390,9 +2400,12 @@ body .metric span{display:inline!important;white-space:nowrap}
   syncedHist.add(h.id);db.history.unshift(toHist(h));schedulePushRender();
  }
  function onKv(pl){
-  const r=pl.new;if(!r||r.chave!=='providers')return;
-  const s=JSON.stringify(r.valor);if(s===syncedProv)return;
-  db.providers=Array.isArray(r.valor)?r.valor:[];syncedProv=s;schedulePushRender();
+  const r=pl.new;if(!r)return;
+  const s=JSON.stringify(r.valor);
+  if(r.chave==='providers'){if(s===syncedProv)return;db.providers=Array.isArray(r.valor)?r.valor:[];syncedProv=s}
+  else if(r.chave==='protecoes'){if(s===syncedProt)return;db.protecoes=Array.isArray(r.valor)?r.valor:[];syncedProt=s}
+  else return;
+  schedulePushRender();
  }
  async function resync(full){
   let q=sb.from('protocolos').select('id,data,atualizado_em,cliente').limit(5000);
@@ -2409,7 +2422,7 @@ body .metric span{display:inline!important;white-space:nowrap}
   }
   const [hi,kv]=await Promise.all([sb.from('historico').select('*').order('em',{ascending:false}).limit(60),sb.from('kv').select('chave,valor')]);
   if(!hi.error)hi.data.forEach(h=>{if(!syncedHist.has(h.id)){syncedHist.add(h.id);db.history.unshift(toHist(h))}});
-  if(!kv.error){const pv=kv.data.find(x=>x.chave==='providers');if(pv&&JSON.stringify(pv.valor)!==syncedProv)onKv({new:{chave:'providers',valor:pv.valor}})}
+  if(!kv.error)kv.data.forEach(x=>onKv({new:x}))
   schedulePushRender();
  }
  function startRealtime(){
@@ -2538,6 +2551,220 @@ body .metric span{display:inline!important;white-space:nowrap}
  g('calcClose').addEventListener('click',close);
  modal.addEventListener('click',e=>{if(e.target===modal)close()});
  document.addEventListener('keydown',e=>{if(e.key==='Escape'&&!modal.classList.contains('hidden'))close()});
+})();
+</script>
+
+<style>
+/* V60: cadastro de proteções e popup de regras */
+.prot-layout{display:grid;grid-template-columns:240px minmax(0,1fr);gap:16px;margin-top:12px}
+#prList{display:flex;flex-direction:column;gap:6px}
+#prList button{text-align:left;display:flex;justify-content:space-between;gap:8px}
+#prList button.on{border-color:var(--blue);box-shadow:inset 0 0 0 1px var(--blue)}
+#prEditor label{display:block;margin:10px 0 4px;font-size:12px;color:var(--muted)}
+#prEditor textarea{min-height:200px}
+.pr-prev{margin:6px 0;display:flex;flex-direction:column;gap:2px}
+.pr-line{display:flex;gap:8px;align-items:flex-start;padding:5px 6px;border-radius:7px;font-size:13px;cursor:pointer}
+.pr-line:hover{background:var(--panel2)}.pr-line input{width:auto;margin-top:3px}
+.pr-line.off{color:var(--muted)}
+.pi{white-space:nowrap}
+.prot-pop{max-width:640px}
+.prot-list{list-style:none;margin:12px 0;padding:0;display:flex;flex-direction:column;gap:7px}
+.prot-list li{display:flex;gap:9px;padding:9px 11px;border:1px solid var(--line);border-left:4px solid var(--blue);border-radius:8px;font-size:14px;line-height:1.4}
+.prot-list li.danger{border-left-color:#c0392b;background:rgba(192,57,43,.1)}
+.prot-pop details{margin:10px 0}.prot-pop pre{white-space:pre-wrap;font:13px/1.5 inherit;color:var(--muted);margin:8px 0 0}
+.bm-prot{margin:12px 0;padding:10px 12px;border:1px solid var(--line);border-radius:10px;background:var(--panel2)}
+.bm-prot .row{margin-bottom:6px}
+.bm-prot ul{list-style:none;margin:6px 0 0;padding:0;font-size:12.5px}.bm-prot li{padding:2px 0}.bm-prot li.danger{color:#d9534f;font-weight:600}
+@media(max-width:700px){.prot-layout{grid-template-columns:1fr}}
+</style>
+<script>
+/* V60: proteções — cadastro de regras em texto; o sistema destaca o importante e alerta em popup. */
+(function(){
+ const g=id=>document.getElementById(id);
+ const norm=v=>String(v||'').normalize('NFD').replace(/[̀-ͯ]/g,'').toUpperCase().replace(/[^A-Z0-9 ]/g,' ').replace(/\s+/g,' ').trim();
+ const prots=()=>db.protecoes||(db.protecoes=[]);
+
+ // ---------- leitura do texto: o que merece alerta
+ const CATS=[
+  ['restricao','⛔',/(n[aã]o\s+(cobre|cobrimos|cobrir|atende|atendemos|permit|autoriz|pode|podemos|realiza|paga|pagamos|reembols|inclui|h[aá])|proibid|vedad|exceto|sem direito|car[eê]ncia|exclu[ií]d|n[aã]o\s+[eé]\s+(coberto|permitido|poss[ií]vel))/i,3],
+  ['obrigatorio','❗',/(obrigat[oó]ri|exig|necess[aá]ri|imprescind|importante|aten[cç][aã]o|cuidado|\bdeve\b|\bdevem\b|\bprecisa\b|somente|apenas|exclusiv)/i,2],
+  ['valor','💲',/(R\$|\bvalor|\breais\b|\bpix\b|pagament|cobran[cç]|\btaxa|tarifa|desconto|reembols|franquia|\bkm\s*rodado|excedente)/i,2],
+  ['limite','📏',/(\bm[aá]xim|\bm[ií]nim|limite|\bat[eé]\s+\d|acima de|abaixo de|hor[aá]rio comercial|segunda\s+a\s+\w+|\b24\s*h|finais? de semana|feriado|\d+\s*km\b|\d+\s*(horas?|hrs?|h\b|dias?|min)\b)/i,2],
+  ['documento','📄',/(nota fiscal|\bnf\b|\bnfe\b|recibo|cnpj|cpf|boletim|\bbo\b|check-?list|\bfotos?\b|comprovante|documento|laudo|assinad|print)/i,2],
+  ['prazo','⏱',/(prazo|imediat|urgente|hor[aá]rio|agend|em at[eé]|antes de|ap[oó]s)/i,1],
+  ['contato','☎',/(ligar|contatar|\bavis|comunic|enviar|solicitar|aprova[cç][aã]o|autoriza[cç][aã]o|whatsapp|e-?mail|grupo)/i,1]
+ ];
+ const ICON=Object.fromEntries(CATS.map(c=>[c[0],c[1]]));
+ function analyze(text){
+  const raw=String(text||'').replace(/\r/g,'').split('\n');
+  const lines=[];
+  for(let l of raw){
+   const marker=/^\s*(!|⚠|\*{1,2}\s*\S|>{1,2})/.test(l)||/\b(IMPORTANTE|ATEN[CÇ][AÃ]O|ALERTA)\b/i.test(l);
+   l=l.replace(/^[\s\-–—•·*!⚠>]+/,'').replace(/^\d+[.)]\s+/,'').trim();
+   if(l.length<4)continue;
+   const parts=l.length>170?l.split(/(?<=[.;!?])\s+/).filter(x=>x.trim().length>=4):[l];
+   for(const t of parts)lines.push({t:t.trim(),marker});
+  }
+  const scored=lines.map((x,i)=>{
+   const cats=CATS.filter(c=>c[2].test(x.t)).map(c=>c[0]);
+   const letters=x.t.replace(/[^A-Za-zÀ-ÿ]/g,'');
+   const shout=letters.length>=10&&x.t.length<=130&&letters===letters.toUpperCase();
+   const score=CATS.reduce((n,c)=>n+(cats.includes(c[0])?c[3]:0),0)+(x.marker?3:0)+(shout?1:0);
+   return {i,t:x.t,key:norm(x.t).slice(0,120),cats,score};
+  });
+  const top=new Set(scored.filter(x=>x.score>=2).sort((a,b)=>b.score-a.score||a.i-b.i).slice(0,15).map(x=>x.i));
+  return scored.map(x=>({...x,auto:top.has(x.i)}));
+ }
+ function effective(pr){
+  const m=pr.marcas||{};
+  return analyze(pr.regras).map(l=>({...l,on:m[l.key]!==undefined?!!m[l.key]:l.auto}));
+ }
+ const icons=l=>l.cats.map(c=>ICON[c]).join('');
+
+ // ---------- localizar proteção pelo nome informado no protocolo
+ function findProt(assoc){
+  const a=norm(assoc);if(a.length<3)return null;
+  let best=null,len=0;
+  for(const pr of prots()){
+   for(const n of [pr.nome,...String(pr.aliases||'').split(',')]){
+    const k=norm(n);if(k.length<3)continue;
+    if((a===k||a.includes(k)||k.includes(a))&&k.length>len){best=pr;len=k.length}
+   }
+  }
+  return best;
+ }
+ window.findProtecao=findProt;
+
+ // ---------- popup de alerta
+ const pop=document.createElement('div');pop.className='bm-back hidden';pop.style.zIndex='9500';pop.setAttribute('role','dialog');pop.setAttribute('aria-modal','true');document.body.appendChild(pop);
+ function showRules(pr,proto){
+  const items=effective(pr).filter(l=>l.on);
+  pop.innerHTML=`<div class="bm-box prot-pop"><div class="bm-head"><div><h2>🛡 ${esc(pr.nome)}</h2><p class="help">Regras importantes desta proteção${proto?' · protocolo '+esc(proto.numero):''}</p></div><button type="button" id="ppClose">✕</button></div>
+  ${items.length?`<ul class="prot-list">${items.map(l=>`<li class="${l.cats.includes('restricao')?'danger':''}"><span class="pi">${icons(l)||'•'}</span><span>${esc(l.t)}</span></li>`).join('')}</ul>`:'<p class="help">Nenhum ponto de destaque foi marcado para esta proteção.</p>'}
+  <details ${items.length?'':'open'}><summary>Ver regras completas</summary><pre>${esc(pr.regras||'(sem texto)')}</pre></details>
+  <div class="row"><button type="button" class="primary" id="ppOk">Entendi</button><button type="button" id="ppEdit">Editar regras</button></div></div>`;
+  pop.classList.remove('hidden');
+  g('ppOk').focus();
+  g('ppClose').onclick=g('ppOk').onclick=()=>pop.classList.add('hidden');
+  g('ppEdit').onclick=()=>{pop.classList.add('hidden');tab('protecoes');select(pr.id)};
+ }
+ pop.addEventListener('click',e=>{if(e.target===pop)pop.classList.add('hidden')});
+ document.addEventListener('keydown',e=>{if(e.key==='Escape')pop.classList.add('hidden')});
+ window.showProtRulesFor=(assoc,proto)=>{const pr=findProt(assoc);if(pr&&(pr.regras||'').trim())showRules(pr,proto);return !!pr};
+
+ // ---------- alerta automático quando a proteção é informada/alterada
+ const lastAssoc=new Map();let seeded=false;
+ window.__suppressProtPopup=false;
+ const basePersist=window.persist;
+ window.persist=function(){
+  let hit=null;
+  if(!window.__suppressProtPopup&&seeded){
+   for(const p of db.protocols){
+    const a=norm(p.associacao);if(!a)continue;
+    if(lastAssoc.get(p.id)!==a){const pr=findProt(p.associacao);if(pr&&(pr.regras||'').trim()){hit={pr,p};break}}
+   }
+  }
+  basePersist.apply(this,arguments);
+  if(hit)setTimeout(()=>showRules(hit.pr,hit.p),150);
+ };
+ const baseRender=window.render;
+ window.render=function(){baseRender.apply(this,arguments);seeded=true;lastAssoc.clear();for(const p of db.protocols)lastAssoc.set(p.id,norm(p.associacao));fillSuggestions()};
+ // a importação em lote não abre um popup por cartão
+ const saveBtn=g('saveImported'),baseSave=saveBtn.onclick;
+ saveBtn.onclick=function(){window.__suppressProtPopup=true;try{return baseSave.apply(this,arguments)}finally{window.__suppressProtPopup=false}};
+
+ // ---------- sugestões de nome nos formulários
+ function fillSuggestions(){
+  const dl=g('protList');if(!dl)return;
+  dl.innerHTML=prots().map(p=>`<option value="${esc(p.nome)}"></option>`).join('');
+ }
+
+ // ---------- cartão aberto no quadro: caixa de regras e seletor
+ window.protBoxHtml=function(p){
+  const pr=findProt(p.associacao),opts=prots().map(x=>x.nome);
+  const cur=p.associacao||'';
+  const list=[...new Set([...(cur&&!opts.includes(cur)?[cur]:[]),...opts])];
+  const items=pr?effective(pr).filter(l=>l.on).slice(0,6):[];
+  return `<div class="bm-prot"><div class="row" style="gap:8px"><label for="bmProt" style="margin:0"><b>Proteção</b></label><select id="bmProt" style="flex:1"><option value="">— informar —</option>${list.map(n=>`<option ${n===cur?'selected':''}>${esc(n)}</option>`).join('')}</select>${pr&&(pr.regras||'').trim()?'<button type="button" id="bmProtRules">🛡 Regras</button>':''}</div>${pr?(items.length?`<ul>${items.map(l=>`<li class="${l.cats.includes('restricao')?'danger':''}">${icons(l)} ${esc(l.t)}</li>`).join('')}</ul>`:'<span class="help">Sem pontos de destaque.</span>'):(cur?'<span class="help">Proteção sem regras cadastradas — veja a aba 🛡 Proteções.</span>':'')}</div>`;
+ };
+ const body=g('boardModalBody');
+ body.addEventListener('change',e=>{
+  if(e.target.id!=='bmProt')return;
+  const id=document.querySelector('#boardModalBody [data-action="edit"]')?.dataset.id,p=db.protocols.find(x=>x.id===id);
+  if(!p)return;
+  p.associacao=e.target.value;p.updatedAt=now();log(p.id,p.numero,'Proteção',p.associacao||'(vazia)');persist();
+ });
+ body.addEventListener('click',e=>{
+  if(e.target.id!=='bmProtRules')return;
+  const id=document.querySelector('#boardModalBody [data-action="edit"]')?.dataset.id,p=db.protocols.find(x=>x.id===id);
+  if(p)window.showProtRulesFor(p.associacao,p);
+ });
+
+ // ---------- aba de cadastro
+ let cur=null,selId=null;
+ const newId=()=>(crypto.randomUUID&&crypto.randomUUID())||String(Date.now()+Math.random());
+ function renderList(){
+  g('prList').innerHTML=prots().map(p=>`<button type="button" data-pr="${esc(p.id)}" class="${p.id===selId?'on':''}"><span>${esc(p.nome||'(sem nome)')}</span><span class="help">${effective(p).filter(l=>l.on).length}</span></button>`).join('')||'<p class="help">Nenhuma proteção cadastrada.</p>';
+ }
+ function select(id){
+  const pr=prots().find(x=>x.id===id);
+  selId=id;cur=pr?{...pr,marcas:{...(pr.marcas||{})}}:null;
+  renderList();renderEditor();
+ }
+ function preview(){
+  const host=g('prPreview');if(!host||!cur)return;
+  const ls=effective(cur);
+  host.innerHTML=ls.length?ls.map((l,i)=>`<label class="pr-line ${l.on?'':'off'}"><input type="checkbox" data-pl="${i}" ${l.on?'checked':''}><span class="pi">${icons(l)||'•'}</span><span>${esc(l.t)}</span></label>`).join(''):'<p class="help">Cole o texto das regras acima.</p>';
+  g('prCount').textContent=ls.filter(l=>l.on).length+' de '+ls.length+' trechos serão alertados';
+ }
+ function renderEditor(){
+  const ed=g('prEditor');
+  if(!cur){ed.innerHTML='<p class="help">Escolha uma proteção ao lado ou crie uma nova.</p>';return}
+  ed.innerHTML=`<label for="prNome">Nome da proteção *</label><input id="prNome" value="${esc(cur.nome||'')}" placeholder="Ex.: PROTEAUTO">
+  <label for="prAlias">Outros nomes ou siglas (separe por vírgula)</label><input id="prAlias" value="${esc(cur.aliases||'')}" placeholder="Ex.: PROTEAUTO BRASIL, PROTE AUTO">
+  <label for="prRegras">Regras (cole o texto como você tem)</label><textarea id="prRegras" placeholder="Cole aqui o texto com as regras desta proteção…">${esc(cur.regras||'')}</textarea>
+  <div class="row" style="justify-content:space-between;margin-top:12px"><strong>O que será alertado</strong><span class="help" id="prCount"></span></div>
+  <p class="help">O sistema marca sozinho os trechos com valores, limites, restrições, documentos e prazos. Desmarque o que não precisa de alerta ou marque o que faltou.</p>
+  <div class="pr-prev" id="prPreview"></div>
+  <div class="row" style="margin-top:14px;flex-wrap:wrap"><button type="button" class="primary" id="prSave">Salvar</button><button type="button" id="prTest">🛡 Ver popup</button><button type="button" class="danger" id="prDel">Excluir</button></div>`;
+  preview();
+ }
+ g('prNew').onclick=()=>{cur={id:newId(),nome:'',aliases:'',regras:'',marcas:{}};selId=null;renderList();renderEditor();g('prNome').focus()};
+ g('prList').addEventListener('click',e=>{const b=e.target.closest('[data-pr]');if(b)select(b.dataset.pr)});
+ g('prEditor').addEventListener('input',e=>{
+  if(!cur)return;
+  if(e.target.id==='prNome')cur.nome=e.target.value;
+  if(e.target.id==='prAlias')cur.aliases=e.target.value;
+  if(e.target.id==='prRegras'){cur.regras=e.target.value;preview()}
+ });
+ g('prEditor').addEventListener('change',e=>{
+  const i=e.target.dataset.pl;if(i===undefined||!cur)return;
+  const l=analyze(cur.regras)[Number(i)];if(!l)return;
+  if(e.target.checked===l.auto)delete cur.marcas[l.key];else cur.marcas[l.key]=e.target.checked;
+  preview();
+ });
+ g('prEditor').addEventListener('click',e=>{
+  if(!cur)return;
+  if(e.target.id==='prSave'){
+   if(!(cur.nome||'').trim()){alert('Informe o nome da proteção.');return}
+   const clash=prots().find(x=>x.id!==cur.id&&norm(x.nome)===norm(cur.nome));
+   if(clash){alert('Já existe uma proteção com esse nome.');return}
+   const rec={id:cur.id,nome:cur.nome.trim(),aliases:(cur.aliases||'').trim(),regras:cur.regras||'',marcas:cur.marcas||{},updatedAt:now()};
+   const i=prots().findIndex(x=>x.id===rec.id);if(i>=0)prots()[i]=rec;else prots().push(rec);
+   prots().sort((a,b)=>a.nome.localeCompare(b.nome));
+   selId=rec.id;persist();renderList();toast('✓ Proteção salva.');
+  }
+  if(e.target.id==='prTest'){const tmp={...cur,nome:cur.nome||'(sem nome)'};showRules(tmp,null)}
+  if(e.target.id==='prDel'){
+   const i=prots().findIndex(x=>x.id===cur.id);
+   if(i<0){cur=null;renderEditor();return}
+   if(!confirm('Excluir a proteção "'+prots()[i].nome+'"? Os protocolos não serão alterados.'))return;
+   prots().splice(i,1);cur=null;selId=null;persist();renderList();renderEditor();
+  }
+ });
+ const tabBtn=document.querySelector('[data-tab="protecoes"]');
+ if(tabBtn)tabBtn.addEventListener('click',()=>{renderList();if(!cur)select(selId||(prots()[0]&&prots()[0].id))});
+ renderList();renderEditor();fillSuggestions();
 })();
 </script>
 
