@@ -796,7 +796,7 @@ function render(){
  renderArchive();renderBilled();renderHistory();
 }
 function confirmArchive(p){return confirm('Confirma o arquivamento?'+(p.faturamentoTask==='Faturado'?'\n\nO protocolo será movido para Finalizado Faturado.':''))}
-function finalizeProtocol(p,old,action){p.status='Concluído';p.closingType=p.faturamentoTask==='Faturado'?'Faturado':'Concluído';p.updatedAt=now();log(p.id,p.numero,action,old+' → '+(p.closingType==='Faturado'?'Finalizado Faturado':'Concluído'));persist();toast(p.closingType==='Faturado'?'✓ Protocolo em Finalizado Faturado.':'✓ Protocolo movido para Concluídos.')}
+function finalizeProtocol(p,old,action){p.status='Concluído';p.arquivado=false;p.closingType=p.faturamentoTask==='Faturado'?'Faturado':'Concluído';p.updatedAt=now();log(p.id,p.numero,action,old+' → '+(p.closingType==='Faturado'?'Finalizado Faturado':'Concluído'));persist();toast(p.closingType==='Faturado'?'✓ Protocolo em Finalizado Faturado.':'✓ Protocolo movido para Concluídos.')}
 function confirmMissingOnFinish(p){
  const missing=missingFields(p),pending=workflowPending(p);
  if(!missing.length&&!pending.length)return true;
@@ -1812,6 +1812,7 @@ body .metric span{display:inline!important;white-space:nowrap}
 .bm-bar{height:6px;background:var(--line);border-radius:4px;margin:6px 0 8px;overflow:hidden}.bm-bar i{display:block;height:100%;background:var(--green)}
 .bm-item{display:flex;gap:9px;align-items:center;padding:5px 2px;cursor:pointer;font-size:14px}.bm-item input{width:auto}.bm-item.done{text-decoration:line-through;color:var(--muted)}
 .bm-actions{margin-top:14px;flex-wrap:wrap}
+.bm-copy{border:0;background:none;padding:0 3px;margin-left:2px;font-size:12px;line-height:1;color:var(--muted,#888);cursor:pointer;opacity:.6;min-height:0;box-shadow:none}.bm-copy:hover{opacity:1;color:var(--blue,#2f7fc1)}
 .bm-form label{display:block;margin:10px 0 4px}
 @media(max-width:600px){.bm-row,.bm-info{grid-template-columns:1fr}}
 </style>
@@ -1877,11 +1878,13 @@ body .metric span{display:inline!important;white-space:nowrap}
  const repasseText=p=>repasseBlock(p)+'\n'+SEP;
  const repasseAll=list=>[...list].sort((a,b)=>needsProvider(b)-needsProvider(a)).map(repasseBlock).join('\n')+'\n'+SEP;
  window.makeReport=function(){
-  const ps=db.protocols.filter(p=>colOf(p)&&colOf(p)!=='Finalizado');
+  // só os protocolos do próprio atendente (sem nome definido, entra tudo)
+  const me=operator().trim().toLowerCase();
+  const ps=db.protocols.filter(p=>colOf(p)&&colOf(p)!=='Finalizado'&&(!me||(p.responsavel||'').trim().toLowerCase()===me));
   const nome=id=>(document.getElementById(id)?.value||'').trim();
   const obs=nome('shiftNotes');
   let out='PASSAGEM DE TURNO — '+new Date().toLocaleString('pt-BR')+'\n';
-  if(nome('shiftName'))out+='ENTREGA: '+nome('shiftName')+'\n';
+  if(nome('shiftName')||operator())out+='ENTREGA: '+(nome('shiftName')||operator())+'\n';
   if(nome('nextName'))out+='RECEBE: '+nome('nextName')+'\n';
   out+='EM ABERTO: '+ps.length+'\n\n';
   out+=ps.length?repasseAll(ps):'Nenhum protocolo em aberto.';
@@ -1905,7 +1908,7 @@ body .metric span{display:inline!important;white-space:nowrap}
  }
  function colOf(p){
   if(p.paymentHandoff?.to||p.status==='Cancelado')return null;
-  if(p.status==='Concluído')return 'Finalizado';
+  if(p.status==='Concluído')return p.arquivado?null:'Finalizado';
   return COLS.includes(p.coluna)&&p.coluna!=='Finalizado'?p.coluna:'Repasse';
  }
  const doneCount=p=>{ensure(p);return CHECKS.reduce((n,c)=>n+p.checklists[c.key].filter(Boolean).length,0)};
@@ -1989,13 +1992,13 @@ body .metric span{display:inline!important;white-space:nowrap}
   const contactsHtml=(p.contatos||[]).map((c,j)=>`<div class="bm-contact"><span><b>${esc(c.papel||'Contato')}:</b> ${esc(c.nome)} ${esc(c.telefone)}</span><button type="button" data-rmc="${j}">✕</button></div>`).join('');
   const info=[['Associado',p.associado],['Telefone',p.telefoneAssociado],['Placa',p.placa],['Motivo',p.motivo||p.servico],['Prestador',p.prestador],['Tel. prestador',p.telefonePrestador],['Valor',p.valor],['Pagamento',p.formaPagamento],['Prévia',p.agenda],['Chegada',p.chegadaEm?fmtDate(p.chegadaEm):'']].filter(x=>x[1]);
   g('boardModalBody').innerHTML=`<div class="bm-head"><div><h2>${esc(title(p))}</h2><p class="help">${esc(p.associacao||'Sem associação')}</p></div><button type="button" id="bmClose">✕</button></div>
-  <div class="bm-info">${info.map(([k,v])=>`<div><b>${k}:</b> ${esc(v)}</div>`).join('')}${p.pendencias?`<div class="wide"><b>Pendências:</b> ${esc(p.pendencias)}</div>`:''}${p.dueAt?`<div class="wide"><b>Prazo:</b> ${esc(fmtDate(p.dueAt))}</div>`:''}</div>
+  <div class="bm-info">${info.map(([k,v])=>`<div><b>${k}:</b> ${esc(v)}${['Associado','Telefone','Placa'].includes(k)?` <button type="button" class="bm-copy" data-copyval="${esc(v)}" title="Copiar ${k.toLowerCase()}">⧉</button>`:''}</div>`).join('')}${p.pendencias?`<div class="wide"><b>Pendências:</b> ${esc(p.pendencias)}</div>`:''}${p.dueAt?`<div class="wide"><b>Prazo:</b> ${esc(fmtDate(p.dueAt))}</div>`:''}</div>
   ${window.protBoxHtml?window.protBoxHtml(p):''}
   <div class="bm-contacts"><strong>Contatos</strong>${contactsHtml}<div class="bm-addc"><input id="bmcNome" placeholder="Nome" autocomplete="off"><input id="bmcTel" data-key="telefoneContato" placeholder="Telefone" maxlength="15" autocomplete="off"><select id="bmcPapel"><option>Solicitante</option><option>Associado</option><option>Prestador</option><option>Outro</option></select><button type="button" id="bmcAdd">＋ Adicionar</button></div></div>
   <div class="bm-row"><div><label for="bmMove">Lista</label><select id="bmMove">${COLS.map(c=>`<option ${c===colOf(p)?'selected':''}>${esc(c)}</option>`).join('')}</select></div><div><label for="bmResp">Responsável (etiqueta)</label><input id="bmResp" value="${esc(p.responsavel||'')}"></div></div>
   <div class="bm-sits"><strong>Situação</strong> <span class="help">(clique para marcar ou desmarcar)</span><div class="chips">${chipsFor(p)}</div><div class="bm-oth"><input id="bmOther" placeholder="Outra situação…" autocomplete="off"><button type="button" id="bmOtherAdd">＋ Adicionar</button></div></div>
   ${CHECKS.map(c=>{const arr=p.checklists[c.key],n=arr.filter(Boolean).length,pct=Math.round(n/arr.length*100);return `<section class="bm-check"><div class="bm-check-head"><strong>${esc(c.title)}</strong><span class="help">${n}/${arr.length}</span></div><div class="bm-bar"><i style="width:${pct}%"></i></div>${c.items.map((t,i)=>`<label class="bm-item ${arr[i]?'done':''}"><input type="checkbox" data-ck="${c.key}" data-i="${i}" ${arr[i]?'checked':''}> ${esc(t)}</label>`).join('')}</section>`}).join('')}
-  <div class="row bm-actions">${canArrive(p)?`<button type="button" class="primary" data-arrived="${esc(p.id)}">📍 Marcar chegada</button>`:''}${canFindProvider(p)?`<button type="button" class="primary" data-found="${esc(p.id)}">✔ Prestador localizado</button>`:''}<button type="button" id="bmCopy">📋 Copiar repasse</button><button type="button" data-action="edit" data-id="${esc(p.id)}">✎ Editar dados</button><button type="button" data-action="attach" data-id="${esc(p.id)}">📎 Anexos</button><button type="button" data-action="protocol-history" data-id="${esc(p.id)}">🕘 Histórico</button><button type="button" data-action="pdf-protocol" data-id="${esc(p.id)}">📑 PDF</button></div>`;
+  <div class="row bm-actions">${canArrive(p)?`<button type="button" class="primary" data-arrived="${esc(p.id)}">📍 Marcar chegada</button>`:''}${canFindProvider(p)?`<button type="button" class="primary" data-found="${esc(p.id)}">✔ Prestador localizado</button>`:''}<button type="button" id="bmCopy">📋 Copiar repasse</button><button type="button" data-action="edit" data-id="${esc(p.id)}">✎ Editar dados</button><button type="button" data-action="attach" data-id="${esc(p.id)}">📎 Anexos</button><button type="button" data-action="protocol-history" data-id="${esc(p.id)}">🕘 Histórico</button><button type="button" data-action="pdf-protocol" data-id="${esc(p.id)}">📑 PDF</button><button type="button" id="bmArchive" title="Tira o cartão do quadro; fica em Concluídos">🗄 Arquivar</button></div>`;
   g('boardModal').classList.remove('hidden');
  }
  function openModal(id){openId=id;renderModal()}
@@ -2024,6 +2027,14 @@ body .metric span{display:inline!important;white-space:nowrap}
   if(chip){const v=chip.dataset.sitchip,a=getSits(p).slice(),k=a.indexOf(v);if(k>=0)a.splice(k,1);else a.push(v);setSits(p,a);p.updatedAt=now();log(p.id,p.numero,'Situação',p.situacao||'(vazia)');persist()}
   if(e.target.id==='bmOtherAdd'){const v=g('bmOther').value.trim().toUpperCase();if(v){const a=getSits(p).slice();if(!a.includes(v))a.push(v);setSits(p,a);p.updatedAt=now();log(p.id,p.numero,'Situação',p.situacao);persist()}}
   if(e.target.id==='bmCopy')copyText(repasseText(p));
+  const cp=e.target.closest('[data-copyval]');
+  if(cp){const v=cp.dataset.copyval;(navigator.clipboard?navigator.clipboard.writeText(v):Promise.reject()).then(()=>toast('✓ Copiado: '+v),()=>{const t=document.createElement('textarea');t.value=v;document.body.appendChild(t);t.select();try{document.execCommand('copy');toast('✓ Copiado: '+v)}catch(_){}t.remove()});return}
+  if(e.target.id==='bmArchive'){
+   if(typeof paymentNeedsAction==='function'&&paymentNeedsAction(p)){alert('🔴 Pendência financeira ativa. Resolva o pagamento antes de arquivar.');return}
+   if(!confirm('Arquivar o protocolo '+p.numero+'? Ele sai do quadro e fica em Concluídos (pode ser reaberto de lá).'))return;
+   const old=colOf(p)||p.status;
+   if(p.status!=='Concluído')finalizeProtocol(p,old,'Arquivado pelo quadro');
+   p.arquivado=true;p.updatedAt=now();log(p.id,p.numero,'Arquivado pelo quadro',old);persist();closeModal();toast('🗄 Protocolo arquivado.');return}
   const rm=e.target.closest('[data-rmc]');if(rm){(p.contatos||[]).splice(Number(rm.dataset.rmc),1);p.updatedAt=now();persist()}
  });
  g('boardSearch').addEventListener('input',renderBoard);
