@@ -3,6 +3,7 @@
 <head>
 <meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Plantão • Protocolos</title>
+<script src="config.js" onerror="this.remove()"></script>
 <style>
 :root{--bg:#0b1020;--panel:#121a2d;--panel2:#18233b;--line:#2a3652;--text:#eef3ff;--muted:#9eacc7;--blue:#6ea8fe;--green:#55d6a1;--yellow:#ffd166;--red:#ff758f}
 *{box-sizing:border-box}body{margin:0;background:radial-gradient(circle at top right,#17284a 0,transparent 38%),var(--bg);color:var(--text);font:15px/1.45 system-ui,-apple-system,Segoe UI,Roboto,Arial}
@@ -717,8 +718,7 @@ function computerStatus(s,state){const el=document.getElementById('computerStora
 async function initializeComputerStorage(){
   if(computerOnline){
     for(const p of db.protocols){if(!p.timerDeadline){p.timerMinutes=20;p.timerDeadline=new Date(Date.now()+20*60000).toISOString();p.timerNotifiedAt=null}}
-    computerReady=true;computerOverlay.remove();render();
-    computerStatus('☁ Modo online: dados salvos só neste navegador. Exporte backup ou use a aba Nuvem.','ok');return;
+    computerStatus('☁ Conectando…','busy');return;
   }
   computerStatus('⏳ Abrindo banco SQLite do computador...','busy');
   try{
@@ -856,7 +856,7 @@ function renderArchive(){
 }
 function renderBilled(){const list=db.protocols.filter(p=>p.status==='Concluído'&&!p.paymentHandoff?.to&&p.closingType==='Faturado');$('billedCount').textContent=list.length+' protocolo(s) faturado(s)';$('billedTabCount').textContent='('+list.length+')';$('billedList').innerHTML=list.length?list.map(card).join(''):'<div class="empty">Nenhum protocolo finalizado faturado.</div>';}
 function renderHandoffs(){const list=db.protocols.filter(p=>p.paymentHandoff?.to);$('handoffCount').textContent=list.length+' protocolo(s) repassado(s)';$('handoffTabCount').textContent='('+list.length+')';$('handoffList').innerHTML=list.length?list.map(card).join(''):'<div class="empty">Nenhum protocolo repassado.</div>';}
-function renderHistory(){const q=clean($('historySearch')?.value).toLowerCase();const hist=db.history.filter(h=>!q||`${h.numero} ${h.acao} ${h.detalhe}`.toLowerCase().includes(q));$('historyList').innerHTML=hist.length?hist.map(h=>`<div class="event"><strong>${esc(h.numero)} · ${esc(h.acao)}</strong><p>${esc(h.detalhe)}</p><small>${fmtDate(h.at)}</small></div>`).join(''):'<div class="empty">Nenhum evento no histórico.</div>'}
+function renderHistory(){const q=clean($('historySearch')?.value).toLowerCase();const hist=db.history.filter(h=>!q||`${h.numero} ${h.acao} ${h.detalhe}`.toLowerCase().includes(q));$('historyList').innerHTML=hist.length?hist.map(h=>`<div class="event"><strong>${esc(h.numero)} · ${esc(h.acao)}</strong><p>${esc(h.detalhe)}</p><small>${fmtDate(h.at)}${h.by?' · '+esc(h.by):''}</small></div>`).join(''):'<div class="empty">Nenhum evento no histórico.</div>'}
 function tab(name){document.querySelectorAll('main section').forEach(s=>s.classList.add('hidden'));$(name).classList.remove('hidden');document.querySelectorAll('.tab').forEach(b=>b.classList.toggle('active',b.dataset.tab===name));if(name==='painel')render();if(name==='historico')renderHistory();if(name==='concluidos')renderArchive();if(name==='repassados')renderHandoffs();if(name==='faturados')renderBilled()}
 document.querySelectorAll('.tab').forEach(b=>b.addEventListener('click',()=>tab(b.dataset.tab)));$('archiveSearch').oninput=renderArchive;$('metricBilled').onclick=()=>tab('faturados');
 const fields={numero:'fNumero',associacao:'fAssoc',solicitante:'fSolicitante',associado:'fAssociado',telefoneAssociado:'fTelefoneAssociado',whatsappAssociado:'fWhatsappAssociado',prestador:'fPrestador',telefonePrestador:'fTelefonePrestador',telefoneSolicitante:'fTelefoneSolicitante',placa:'fPlaca',whatsappPrestador:'fWhatsappPrestador',servico:'fServico',valor:'fValor',agenda:'fAgenda',status:'fStatus',responsavel:'fResponsavel',chegadaTask:'fChegada',fotosTask:'fFotos',faturamentoTask:'fFaturamento',pendencias:'fPendencias',notas:'fNotas',abertura:'fAbertura',modelo:'fModelo',motivo:'fMotivo',origem:'fOrigem',destino:'fDestino',distancia:'fDistancia',tipoVeiculo:'fTipoVeiculo',cor:'fCor',documentoAssociado:'fDocumentoAssociado',documentoPrestador:'fDocumentoPrestador'};
@@ -2156,6 +2156,356 @@ body .metric span{display:inline!important;white-space:nowrap}
 
  // --- situação e contatos dentro do cartão do quadro (usado pelo modal do quadro)
 
+})();
+</script>
+
+<script>
+/* V59: modo online multiusuário (Supabase): login, sincronização por protocolo, tempo real, anexos e PDF. */
+(function(){
+ if(!computerOnline)return;
+ const g=id=>document.getElementById(id);
+ const CLIENT=(crypto.randomUUID&&crypto.randomUUID())||String(Math.random());
+ const CFGKEY='plantao_supabase',OPKEY='plantao_operador',LIB='https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.min.js';
+ const clone=o=>JSON.parse(JSON.stringify(o));
+ const same=(a,b)=>JSON.stringify(a)===JSON.stringify(b);
+ const synced=new Map(),syncedHist=new Set();
+ let syncedProv='[]',sb=null,me=null,perfil=null,loaded=false,pushing=false,pushAgain=false,pushTimer=null,retryTimer=null,lastSeen='',reconnected=false,channel=null,renderTimer=null;
+
+ // ---------- configuração e biblioteca
+ function cfg(){
+  const c=window.PLANTAO_CONFIG||{};
+  if(c.url&&c.key)return {url:c.url,key:c.key};
+  try{const s=JSON.parse(localStorage.getItem(CFGKEY)||'null');if(s&&s.url&&s.key)return s}catch(e){}
+  return null;
+ }
+ function loadLib(){
+  if(window.supabase)return Promise.resolve();
+  return new Promise((ok,fail)=>{const s=document.createElement('script');s.src=LIB;s.onload=ok;s.onerror=()=>fail(new Error('Não foi possível carregar a biblioteca do Supabase (sem internet?).'));document.head.appendChild(s)});
+ }
+ async function ensureClient(fields){
+  if(sb)return;
+  let c=cfg();
+  if(!c&&fields){
+   const url=(fields.url||'').trim().replace(/\/$/,''),key=(fields.key||'').trim();
+   if(!/^https:\/\/[a-z0-9.-]+\.supabase\.co$/i.test(url))throw new Error('Informe a URL HTTPS do projeto Supabase.');
+   if(!/^(eyJ|sb_publishable_)/.test(key))throw new Error('Informe somente a chave pública (publishable ou anon).');
+   c={url,key};try{localStorage.setItem(CFGKEY,JSON.stringify(c))}catch(e){}
+  }
+  if(!c)throw new Error('Informe a URL e a chave pública do Supabase.');
+  await loadLib();
+  sb=window.supabase.createClient(c.url,c.key,{auth:{persistSession:true,autoRefreshToken:true,storageKey:'plantao-auth'}});
+ }
+
+ // ---------- tela de entrada
+ const ov=document.createElement('div');ov.id='loginOverlay';ov.className='bm-back';ov.style.zIndex='100001';document.body.appendChild(ov);
+ function showLogin(msg){
+  const need=!cfg();
+  ov.innerHTML=`<div class="bm-box bm-form" style="max-width:430px"><h2>Plantão • Protocolos</h2><p class="help">Entre com a sua conta para acessar o quadro compartilhado da equipe.</p>
+  ${need?`<label for="lgUrl">URL do projeto Supabase</label><input id="lgUrl" placeholder="https://xxxx.supabase.co" autocomplete="off"><label for="lgKey">Chave pública (publishable / anon)</label><input id="lgKey" autocomplete="off">`:''}
+  <label for="lgNome">Seu nome (somente para criar conta)</label><input id="lgNome" autocomplete="name">
+  <label for="lgEmail">E-mail</label><input id="lgEmail" type="email" autocomplete="username">
+  <label for="lgPass">Senha</label><input id="lgPass" type="password" autocomplete="current-password">
+  <p id="lgMsg" class="help" role="alert" style="color:#d9534f">${msg||''}</p>
+  <div class="row"><button type="button" class="primary" id="lgEnter">Entrar</button><button type="button" id="lgSignup">Criar conta</button></div>
+  <p class="help" style="margin-top:12px"><a href="#" id="lgLocal">Usar só neste navegador (sem nuvem, sem equipe)</a></p></div>`;
+  ov.classList.remove('hidden');
+  const fields=()=>need?{url:g('lgUrl').value,key:g('lgKey').value}:null;
+  const say=m=>{g('lgMsg').textContent=m};
+  const traduz=m=>/invalid login/i.test(m)?'E-mail ou senha incorretos.':/email not confirmed/i.test(m)?'Confirme o e-mail (veja sua caixa de entrada) antes de entrar.':/already registered/i.test(m)?'Este e-mail já tem conta. Use "Entrar".':m;
+  g('lgEnter').onclick=async()=>{
+   say('Entrando…');
+   try{
+    await ensureClient(fields());
+    const {error}=await sb.auth.signInWithPassword({email:g('lgEmail').value.trim(),password:g('lgPass').value});
+    if(error)throw error;
+    await afterLogin();
+   }catch(e){say(traduz(e.message||String(e)))}
+  };
+  g('lgSignup').onclick=async()=>{
+   say('Criando conta…');
+   try{
+    await ensureClient(fields());
+    const pass=g('lgPass').value;if(pass.length<6)throw new Error('A senha precisa de pelo menos 6 caracteres.');
+    const {data,error}=await sb.auth.signUp({email:g('lgEmail').value.trim(),password:pass,options:{data:{nome:g('lgNome').value.trim()}}});
+    if(error)throw error;
+    if(data.session)await afterLogin();
+    else say('Conta criada. Confirme o e-mail, se solicitado, e depois peça ao administrador para ativar seu acesso.');
+   }catch(e){say(traduz(e.message||String(e)))}
+  };
+  g('lgLocal').onclick=e=>{e.preventDefault();useLocal()};
+ }
+ function showPending(){
+  ov.innerHTML=`<div class="bm-box bm-form" style="max-width:430px"><h2>Aguardando ativação</h2><p>Sua conta (<b>${esc(me.email)}</b>) foi criada, mas ainda não foi liberada. Peça a um administrador para ativar seu acesso na aba <b>Equipe</b>.</p><div class="row"><button type="button" class="primary" id="pdCheck">Verificar novamente</button><button type="button" id="pdOut">Sair</button></div></div>`;
+  ov.classList.remove('hidden');
+  g('pdCheck').onclick=()=>afterLogin().catch(e=>alert(e.message));
+  g('pdOut').onclick=logout;
+ }
+ function useLocal(){
+  for(const p of db.protocols){if(!p.timerDeadline){p.timerMinutes=20;p.timerDeadline=new Date(Date.now()+20*60000).toISOString();p.timerNotifiedAt=null}}
+  computerReady=true;computerOverlay.remove();ov.classList.add('hidden');render();
+  computerStatus('☁ Sem nuvem: dados salvos só neste navegador. Exporte backup com frequência.','busy');
+ }
+ async function logout(){try{await sb.auth.signOut()}catch(e){}location.reload()}
+
+ // ---------- carregamento
+ const cut=()=>new Date(Date.now()-90*864e5).toISOString();
+ const toProto=r=>({...r.data,id:r.id});
+ const track=ts=>{if(ts&&ts>lastSeen)lastSeen=ts};
+ const toHist=h=>({id:h.id,protocolId:h.protocolo_id,numero:h.numero,acao:h.acao,detalhe:h.detalhe,at:h.em,by:h.usuario});
+ const status=(t,s)=>computerStatus(t,s);
+ const okStatus=()=>status('☁ Sincronizado · '+(perfil?.nome||me?.email||''),'ok');
+
+ async function afterLogin(){
+  const {data:u,error:ue}=await sb.auth.getUser();if(ue||!u.user)throw ue||new Error('Sessão inválida.');
+  me=u.user;
+  const {data:pf,error}=await sb.from('perfis').select('id,nome,email,ativo,admin').eq('id',me.id).maybeSingle();
+  if(error)throw error;
+  perfil=pf;
+  if(!pf||!pf.ativo){showPending();return}
+  try{localStorage.setItem(OPKEY,pf.nome||'')}catch(e){}
+  status('☁ Carregando dados da equipe…','busy');
+  await loadAll();
+  ov.classList.add('hidden');
+  decorate();startRealtime();
+ }
+ async function loadAll(){
+  const [pr,hi,kv]=await Promise.all([
+   sb.from('protocolos').select('id,data,atualizado_em').or('status.is.null,status.neq.Concluído,atualizado_em.gt.'+cut()).limit(5000),
+   sb.from('historico').select('*').order('em',{ascending:false}).limit(1500),
+   sb.from('kv').select('chave,valor')
+  ]);
+  for(const r of [pr,hi,kv])if(r.error)throw r.error;
+  let local=null;try{local=JSON.parse(localStorage.getItem(DBKEY)||'null')}catch(e){}
+  synced.clear();syncedHist.clear();
+  if(!pr.data.length&&local&&Array.isArray(local.protocols)&&local.protocols.length&&confirm('A nuvem está vazia e este navegador tem '+local.protocols.length+' protocolo(s) salvos.\n\nEnviar esses protocolos para a nuvem da equipe?')){
+   db={protocols:local.protocols,history:local.history||[],providers:local.providers||[]};
+  }else{
+   db={protocols:pr.data.map(r=>{track(r.atualizado_em);const p=toProto(r);synced.set(p.id,clone(p));return p}),history:hi.data.map(h=>{syncedHist.add(h.id);return toHist(h)}),providers:[]};
+   db.protocols.sort((a,b)=>String(b.createdAt||'').localeCompare(String(a.createdAt||'')));
+   const prov=kv.data.find(x=>x.chave==='providers');
+   db.providers=Array.isArray(prov?.valor)?prov.valor:[];syncedProv=JSON.stringify(db.providers);
+  }
+  cache();
+  loaded=true;computerReady=true;computerOverlay.remove();
+  render();okStatus();schedulePush();
+ }
+ const cache=()=>{try{localStorage.setItem(DBKEY,JSON.stringify(db))}catch(e){}};
+
+ // ---------- envio (somente o que mudou)
+ function diff(p,base){
+  const patch={};
+  for(const k of new Set([...Object.keys(p),...Object.keys(base)])){
+   if(!same(p[k],base[k]))patch[k]=p[k]===undefined?null:p[k];
+  }
+  return patch;
+ }
+ function schedulePush(){clearTimeout(pushTimer);pushTimer=setTimeout(push,250)}
+ function pendingCount(){
+  let n=0;for(const p of db.protocols){const b=synced.get(p.id);if(!b||Object.keys(diff(p,b)).length)n++}
+  return n+[...synced.keys()].filter(id=>!db.protocols.some(p=>p.id===id)).length;
+ }
+ async function push(){
+  if(!sb||!loaded)return;
+  if(pushing){pushAgain=true;return}
+  pushing=true;
+  try{
+   do{
+    pushAgain=false;
+    const ops=[];
+    for(const p of db.protocols){
+     const base=synced.get(p.id),patch=base?diff(p,base):clone(p);
+     if(Object.keys(patch).length)ops.push({p,patch,snap:clone(p),isNew:!base});
+    }
+    const ids=new Set(db.protocols.map(p=>p.id)),removed=[...synced.keys()].filter(id=>!ids.has(id));
+    if(removed.length>5&&!confirm('Esta ação vai APAGAR '+removed.length+' protocolos da nuvem para toda a equipe. Continuar?')){await resync(true);continue}
+    if(ops.length||removed.length)status('☁ Sincronizando…','busy');
+    for(const op of ops){
+     const {error}=await sb.rpc('plantao_patch',{p_id:op.p.id,p_patch:op.patch,p_cliente:CLIENT});
+     if(error){
+      if(error.code==='23505'){
+       if(op.isNew){toast('Protocolo '+op.p.numero+' já foi criado por outra pessoa. Atualizando…');await resync(true)}
+       else{toast('Esse número de protocolo já existe. Alteração desfeita.');op.p.numero=synced.get(op.p.id).numero;schedulePushRender()}
+       continue;
+      }
+      throw error;
+     }
+     synced.set(op.p.id,op.snap);
+    }
+    for(const id of removed){
+     const {error}=await sb.from('protocolos').delete().eq('id',id);if(error)throw error;synced.delete(id);
+    }
+    const newHist=db.history.filter(h=>!syncedHist.has(h.id));
+    if(newHist.length){
+     const rows=newHist.map(h=>({id:h.id,protocolo_id:h.protocolId||null,numero:h.numero||null,acao:h.acao||null,detalhe:h.detalhe||null,em:h.at||new Date().toISOString(),usuario:h.by||perfil?.nome||null}));
+     const {error}=await sb.from('historico').upsert(rows,{onConflict:'id',ignoreDuplicates:true});if(error)throw error;
+     newHist.forEach(h=>syncedHist.add(h.id));
+    }
+    const prov=JSON.stringify(db.providers||[]);
+    if(prov!==syncedProv){
+     const {error}=await sb.from('kv').upsert({chave:'providers',valor:db.providers||[],atualizado_em:new Date().toISOString()});if(error)throw error;
+     syncedProv=prov;
+    }
+   }while(pushAgain);
+   clearTimeout(retryTimer);okStatus();
+  }catch(e){
+   console.error(e);
+   status('⚠ Sem conexão com a nuvem — '+pendingCount()+' alteração(ões) pendente(s). Tentando de novo…','error');
+   clearTimeout(retryTimer);retryTimer=setTimeout(push,5000);
+  }finally{pushing=false}
+ }
+
+ // ---------- recebimento (tempo real + verificação periódica)
+ function schedulePushRender(){clearTimeout(renderTimer);renderTimer=setTimeout(()=>{cache();render()},120)}
+ function applyRemote(row){
+  track(row.atualizado_em);
+  const incoming=toProto(row),idx=db.protocols.findIndex(p=>p.id===row.id),base=synced.get(row.id);
+  let merged=incoming;
+  if(idx>=0&&base){const pend=diff(db.protocols[idx],base);if(Object.keys(pend).length)merged={...incoming,...pend}}
+  synced.set(row.id,clone(incoming));
+  if(idx>=0)db.protocols[idx]=merged;else db.protocols.unshift(merged);
+  if(merged!==incoming)schedulePush();
+  schedulePushRender();
+ }
+ function onProto(pl){
+  if(pl.eventType==='DELETE'){
+   const id=pl.old&&pl.old.id;if(!id)return;
+   const i=db.protocols.findIndex(p=>p.id===id);if(i>=0)db.protocols.splice(i,1);synced.delete(id);schedulePushRender();return;
+  }
+  const r=pl.new;if(!r||r.cliente===CLIENT)return;
+  applyRemote(r);
+ }
+ function onHist(pl){
+  const h=pl.new;if(!h||syncedHist.has(h.id))return;
+  syncedHist.add(h.id);db.history.unshift(toHist(h));schedulePushRender();
+ }
+ function onKv(pl){
+  const r=pl.new;if(!r||r.chave!=='providers')return;
+  const s=JSON.stringify(r.valor);if(s===syncedProv)return;
+  db.providers=Array.isArray(r.valor)?r.valor:[];syncedProv=s;schedulePushRender();
+ }
+ async function resync(full){
+  let q=sb.from('protocolos').select('id,data,atualizado_em,cliente').limit(5000);
+  q=(full||!lastSeen)?q.or('status.is.null,status.neq.Concluído,atualizado_em.gt.'+cut()):q.gt('atualizado_em',lastSeen);
+  const {data,error}=await q;if(error)throw error;
+  const remoteIds=new Set();
+  for(const r of data){remoteIds.add(r.id);if(r.cliente!==CLIENT||full)applyRemote(r);else track(r.atualizado_em)}
+  if(full){
+   for(const id of [...synced.keys()]){
+    if(remoteIds.has(id))continue;
+    const i=db.protocols.findIndex(p=>p.id===id);if(i>=0&&!Object.keys(diff(db.protocols[i],synced.get(id))).length)db.protocols.splice(i,1);
+    synced.delete(id);
+   }
+  }
+  const [hi,kv]=await Promise.all([sb.from('historico').select('*').order('em',{ascending:false}).limit(60),sb.from('kv').select('chave,valor')]);
+  if(!hi.error)hi.data.forEach(h=>{if(!syncedHist.has(h.id)){syncedHist.add(h.id);db.history.unshift(toHist(h))}});
+  if(!kv.error){const pv=kv.data.find(x=>x.chave==='providers');if(pv&&JSON.stringify(pv.valor)!==syncedProv)onKv({new:{chave:'providers',valor:pv.valor}})}
+  schedulePushRender();
+ }
+ function startRealtime(){
+  if(channel)return;
+  channel=sb.channel('plantao-'+CLIENT)
+   .on('postgres_changes',{event:'*',schema:'public',table:'protocolos'},onProto)
+   .on('postgres_changes',{event:'INSERT',schema:'public',table:'historico'},onHist)
+   .on('postgres_changes',{event:'*',schema:'public',table:'kv'},onKv)
+   .subscribe(s=>{
+    if(s==='SUBSCRIBED'){if(reconnected)resync(true).catch(console.error);reconnected=true;if(!pushing&&!pendingCount())okStatus()}
+    else if(s==='CHANNEL_ERROR'||s==='TIMED_OUT')status('⚠ Tempo real desconectado — verificando a cada 30 s','error');
+   });
+  setInterval(()=>{if(loaded&&!pushing)resync(false).catch(()=>{})},30000);
+  document.addEventListener('visibilitychange',()=>{if(!document.hidden&&loaded)resync(false).catch(()=>{})});
+ }
+
+ // ---------- integração com o app
+ const basePersist=window.persist;
+ window.persist=function(){basePersist.apply(this,arguments);if(loaded)schedulePush()};
+ window.cloudLocalChanged=()=>{};
+ const baseLog=window.log;
+ window.log=function(){baseLog.apply(this,arguments);const h=db.history[0];if(h&&!h.by)h.by=perfil?.nome||''};
+
+ function decorate(){
+  const tools=document.querySelector('.header-tools');
+  if(tools&&!g('whoami')){
+   tools.insertAdjacentHTML('afterbegin',`<span class="help" id="whoami" style="align-self:center">👤 ${esc(perfil.nome||me.email)}</span><button type="button" id="logoutBtn">Sair</button>`);
+   g('logoutBtn').onclick=logout;
+  }
+  const c=g('clearHistory');if(c)c.style.display='none';
+  // aba Nuvem vira Equipe
+  const tabBtn=document.querySelector('[data-tab="nuvem"]');if(tabBtn){tabBtn.textContent='👥 Equipe';tabBtn.addEventListener('click',renderTeam)}
+  const sec=g('nuvem');
+  if(sec&&!g('teamPanel')){[...sec.children].forEach(x=>x.style.display='none');sec.insertAdjacentHTML('beforeend','<div class="panel" id="teamPanel"><h2>👥 Equipe</h2><p class="help">Quem pode acessar o quadro. Contas novas ficam pendentes até um administrador ativar.</p><div id="teamList"></div></div>')}
+  g('teamPanel')?.addEventListener('click',async e=>{
+   const b=e.target.closest('[data-uid]');if(!b)return;
+   const patch=b.dataset.act==='ativo'?{ativo:b.dataset.val==='1'}:{admin:b.dataset.val==='1'};
+   const {error}=await sb.from('perfis').update(patch).eq('id',b.dataset.uid);
+   if(error)alert('Não foi possível alterar: '+error.message);renderTeam();
+  });
+ }
+ async function renderTeam(){
+  const host=g('teamList');if(!host||!sb)return;
+  const {data,error}=await sb.from('perfis').select('id,nome,email,ativo,admin').order('criado_em');
+  if(error){host.textContent=error.message;return}
+  host.innerHTML=data.map(u=>`<div class="row" style="justify-content:space-between;margin:8px 0;gap:10px"><div><b>${esc(u.nome||u.email)}</b> <span class="help">${esc(u.email||'')}</span><br><span class="help">${u.admin?'Administrador · ':''}${u.ativo?'Ativo':'⏳ Pendente'}</span></div>${perfil.admin&&u.id!==me.id?`<div class="row"><button type="button" data-uid="${u.id}" data-act="ativo" data-val="${u.ativo?0:1}">${u.ativo?'Desativar':'Ativar'}</button><button type="button" data-uid="${u.id}" data-act="admin" data-val="${u.admin?0:1}">${u.admin?'Remover admin':'Tornar admin'}</button></div>`:''}</div>`).join('')||'<p class="help">Nenhum usuário.</p>';
+ }
+
+ // histórico mostra quem fez
+ // (o campo "by" é exibido por renderHistory)
+
+ // ---------- anexos no Storage
+ const BUCKET='anexos';
+ const safeName=n=>String(n||'arquivo').normalize('NFD').replace(/[̀-ͯ]/g,'').replace(/[^a-zA-Z0-9_.-]/g,'_').slice(0,100)||'arquivo';
+ const folder=()=>String(attachmentProtocolId);
+ window.loadAttachments=async function(){
+  try{
+   const {data,error}=await sb.storage.from(BUCKET).list(folder(),{limit:200,sortBy:{column:'name',order:'asc'}});if(error)throw error;
+   const files=(data||[]).filter(f=>f.name);
+   g('attachmentList').innerHTML=files.length?files.map(f=>`<div class="row" style="justify-content:space-between;margin:8px 0"><a href="#" data-dl="${esc(f.name)}">${esc(f.name.split('__').slice(1).join('__')||f.name)}</a><button type="button" data-delete-attachment="${esc(f.name)}">Excluir</button></div>`).join(''):'<p class="help">Nenhum anexo.</p>';
+  }catch(e){g('attachmentList').textContent=e.message}
+ };
+ const listOld=g('attachmentList'),listNew=listOld.cloneNode(true);listOld.replaceWith(listNew);
+ listNew.addEventListener('click',async e=>{
+  const dl=e.target.closest('[data-dl]');
+  if(dl){e.preventDefault();const {data,error}=await sb.storage.from(BUCKET).createSignedUrl(folder()+'/'+dl.dataset.dl,120);if(error){alert(error.message);return}window.open(data.signedUrl,'_blank','noopener');return}
+  const b=e.target.closest('[data-delete-attachment]');if(!b||!confirm('Excluir este anexo?'))return;
+  const {error}=await sb.storage.from(BUCKET).remove([folder()+'/'+b.dataset.deleteAttachment]);
+  if(error){alert(error.message);return}
+  const p=db.protocols.find(x=>x.id===attachmentProtocolId);if(p){p.attachmentCount=Math.max(0,(p.attachmentCount||0)-1);log(p.id,p.numero,'Anexo removido',b.dataset.deleteAttachment);persist()}
+  await window.loadAttachments();
+ });
+ g('attachmentInput').onchange=async e=>{
+  for(const file of [...e.target.files]){
+   if(file.size>12*1024*1024){alert('Arquivo acima de 12 MB: '+file.name);continue}
+   const {error}=await sb.storage.from(BUCKET).upload(folder()+'/'+Date.now()+'__'+safeName(file.name),file,{contentType:file.type||'application/octet-stream'});
+   if(error){alert('Falha ao anexar '+file.name+': '+error.message);continue}
+   const p=db.protocols.find(x=>x.id===attachmentProtocolId);if(p){p.attachmentCount=(p.attachmentCount||0)+1;log(p.id,p.numero,'Anexo incluído',file.name);persist()}
+  }
+  e.target.value='';await window.loadAttachments();
+ };
+
+ // ---------- PDF (impressão do navegador) e backup
+ window.exportProtocolPDF=async function(p){
+  const w=window.open('','_blank');if(!w){alert('Permita pop-ups para gerar o PDF.');return}
+  const row=(k,v)=>v?`<tr><th>${esc(k)}</th><td>${esc(v).replace(/\n/g,'<br>')}</td></tr>`:'';
+  const sits=(p.situacoes||[]).join(', ')||p.situacao||'';
+  w.document.write(`<!doctype html><html lang="pt-BR"><meta charset="utf-8"><title>Protocolo ${esc(p.numero)}</title><style>body{font:13px system-ui,Arial;margin:32px;color:#1d2b3a}h1{font-size:20px;margin:0 0 4px}h2{font-size:13px;margin:22px 0 6px;color:#555;text-transform:uppercase}table{width:100%;border-collapse:collapse}th{text-align:left;width:34%;color:#667;font-weight:600;padding:6px 8px;vertical-align:top}td{padding:6px 8px}tr:nth-child(odd){background:#f5f7fa}footer{margin-top:28px;font-size:11px;color:#889}</style><h1>Protocolo ${esc(p.numero)}</h1><div>${esc(p.associacao||'')}</div>
+  <h2>Atendimento</h2><table>${row('Situação',sits)}${row('Status',p.status)}${row('Serviço',p.servico)}${row('Motivo',p.motivo)}${row('Associado',p.associado)}${row('Telefone do associado',p.telefoneAssociado)}${row('Solicitante',p.solicitante)}${row('Telefone do solicitante',p.telefoneSolicitante)}${row('Prestador',p.prestador)}${row('Telefone do prestador',p.telefonePrestador)}${row('WhatsApp/grupo do prestador',p.whatsappPrestador)}${row('Placa',p.placa)}${row('Valor',p.valor)}${row('Agendamento',p.agenda)}${row('Responsável',p.responsavel)}</table>
+  <h2>Pendências e notas</h2><table>${row('Pendências',p.pendencias)}${row('Notas',p.notas)}</table>
+  <h2>Registro</h2><table>${row('Criado em',p.createdAt)}${row('Atualizado em',p.updatedAt)}</table><footer>Plantão • Protocolos · gerado em ${new Date().toLocaleString('pt-BR')}</footer>`);
+  w.document.close();w.focus();setTimeout(()=>w.print(),300);
+ };
+ const bk=g('v54BackupNow');if(bk){const nb=bk.cloneNode(true);bk.replaceWith(nb);nb.textContent='💾 Baixar backup (JSON)';nb.addEventListener('click',()=>g('exportBtn').click())}
+
+ // ---------- início
+ status('☁ Conectando…','busy');
+ boot();
+ async function boot(){
+  if(!cfg()){showLogin('');return}
+  try{
+   await ensureClient();
+   const {data}=await sb.auth.getSession();
+   if(data.session){await afterLogin();return}
+  }catch(e){console.error(e);showLogin(e.message||'');return}
+  showLogin('');
+ }
 })();
 </script>
 
