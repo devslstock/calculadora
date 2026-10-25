@@ -1866,6 +1866,7 @@ body .metric span{display:inline!important;white-space:nowrap}
  const needsProvider=p=>{const s=getSits(p);return s.includes('PROCURAR PRESTADOR')||s.includes('AGUARDANDO ENDEREÇO')||colOf(p)==='Localizando Prestador'};
  const repasseHeader=p=>needsProvider(p)?'⚠️ BUSCAR PRESTADOR':'📌 PARA ACOMPANHAR';
  const SEP='----------------';
+ const canFindProvider=p=>colOf(p)==='Localizando Prestador'||(colOf(p)==='Repasse'&&needsProvider(p));
  const repasseBlock=p=>SEP+'\n'+repasseHeader(p)+'\n\n'+repasseLines(p,true).map(([k,v])=>(k+': '+v).trimEnd()).join('\n');
  const repasseText=p=>repasseBlock(p)+'\n'+SEP;
  const repasseAll=list=>[...list].sort((a,b)=>needsProvider(b)-needsProvider(a)).map(repasseBlock).join('\n')+'\n'+SEP;
@@ -1885,7 +1886,7 @@ body .metric span{display:inline!important;white-space:nowrap}
   try{await navigator.clipboard.writeText(t);toast('✓ Repasse copiado.')}
   catch(e){const ta=document.createElement('textarea');ta.value=t;document.body.appendChild(ta);ta.select();try{document.execCommand('copy');toast('✓ Repasse copiado.')}catch(_){alert(t)}ta.remove()}
  }
- Object.assign(window,{SITUACOES,getSits,setSits,chipsFor,repasseText,repasseLines,repasseAll});
+ Object.assign(window,{SITUACOES,getSits,setSits,chipsFor,repasseText,repasseLines,repasseAll,boardMove:move,boardColOf:colOf,closeBoardModal:closeModal});
  const OPKEY='plantao_operador',STARTKEY='plantao_inicio_ok',OWNERKEY='plantao_board_owner';
  const TAGS=['#1f8a5b','#a35ccb','#2f7fc1','#c27a1a','#c0507a','#4f8f9b'];
  let openId=null;
@@ -1933,7 +1934,7 @@ body .metric span{display:inline!important;white-space:nowrap}
  function cardHtml(p){
   const d=p.dueAt?dueText(p.dueAt):null;
   const lines=repasseLines(p).map(([k,v])=>k==='SITUAÇÃO'?'':k==='PROTOCOLO'?`<div class="bcard-num">${esc(v)}</div>`:k==='ASSOCIADO'?`<div>${esc(v)}</div>`:`<div><b>${k}:</b> ${esc(v)}</div>`).join('')+(getSits(p).length?`<div class="bcard-sits">${getSits(p).map(x=>`<span class="bcard-sit">${esc(x)}</span>`).join('')}</div>`:'');
-  return `<article class="bcard" draggable="true" data-id="${esc(p.id)}">${p.responsavel?`<div class="bcard-tags"><span class="btag" style="background:${tagColor(p.responsavel)}">${esc(p.responsavel)}</span></div>`:''}<div class="bcard-lines">${lines}</div><div class="bcard-meta"><span>☑ ${doneCount(p)}/${TOTAL}</span>${p.dueAt?`<span class="bdue ${d.late?'late':''}" data-due="${esc(p.dueAt)}">${d.t}</span>`:''}</div></article>`;
+  return `<article class="bcard" draggable="true" data-id="${esc(p.id)}">${p.responsavel?`<div class="bcard-tags"><span class="btag" style="background:${tagColor(p.responsavel)}">${esc(p.responsavel)}</span></div>`:''}<div class="bcard-lines">${lines}</div><div class="bcard-meta"><span>☑ ${doneCount(p)}/${TOTAL}</span>${p.dueAt?`<span class="bdue ${d.late?'late':''}" data-due="${esc(p.dueAt)}">${d.t}</span>`:''}${p.providerEtaDeadline&&colOf(p)==='Prestador a Caminho'?(()=>{const e=dueText(p.providerEtaDeadline);return `<span class="bdue ${e.late?'late':''}" data-due="${esc(p.providerEtaDeadline)}" data-ico="🚚" title="Prévia de chegada do prestador">${e.late?'🚚 PRÉVIA VENCIDA':e.t.replace('⏱','🚚')}</span>`})():''}</div>${canFindProvider(p)?`<button type="button" class="bcard-act primary" data-found="${esc(p.id)}">✔ Prestador localizado</button>`:''}</article>`;
  }
  function renderBoard(){
   const host=g('boardHost');if(!host||typeof db==='undefined'||!db||!Array.isArray(db.protocols))return;
@@ -1958,7 +1959,7 @@ body .metric span{display:inline!important;white-space:nowrap}
   if(openId)renderModal();
  }
  function tick(){
-  document.querySelectorAll('.bdue[data-due]').forEach(el=>{const d=dueText(el.dataset.due);el.textContent=d.t;el.classList.toggle('late',d.late)});
+  document.querySelectorAll('.bdue[data-due]').forEach(el=>{const d=dueText(el.dataset.due),ico=el.dataset.ico;el.textContent=ico?(d.late?ico+' PRÉVIA VENCIDA':d.t.replace('⏱',ico)):d.t;el.classList.toggle('late',d.late)});
  }
 
  function renderModal(){
@@ -1966,7 +1967,7 @@ body .metric span{display:inline!important;white-space:nowrap}
   if(!p||!colOf(p)){closeModal();return}
   ensure(p);
   const contactsHtml=(p.contatos||[]).map((c,j)=>`<div class="bm-contact"><span><b>${esc(c.papel||'Contato')}:</b> ${esc(c.nome)} ${esc(c.telefone)}</span><button type="button" data-rmc="${j}">✕</button></div>`).join('');
-  const info=[['Associado',p.associado],['Telefone',p.telefoneAssociado],['Placa',p.placa],['Motivo',p.motivo||p.servico],['Prestador',p.prestador],['Tel. prestador',p.telefonePrestador]].filter(x=>x[1]);
+  const info=[['Associado',p.associado],['Telefone',p.telefoneAssociado],['Placa',p.placa],['Motivo',p.motivo||p.servico],['Prestador',p.prestador],['Tel. prestador',p.telefonePrestador],['Valor',p.valor],['Pagamento',p.formaPagamento],['Prévia',p.agenda]].filter(x=>x[1]);
   g('boardModalBody').innerHTML=`<div class="bm-head"><div><h2>${esc(title(p))}</h2><p class="help">${esc(p.associacao||'Sem associação')}</p></div><button type="button" id="bmClose">✕</button></div>
   <div class="bm-info">${info.map(([k,v])=>`<div><b>${k}:</b> ${esc(v)}</div>`).join('')}${p.pendencias?`<div class="wide"><b>Pendências:</b> ${esc(p.pendencias)}</div>`:''}${p.dueAt?`<div class="wide"><b>Prazo:</b> ${esc(fmtDate(p.dueAt))}</div>`:''}</div>
   ${window.protBoxHtml?window.protBoxHtml(p):''}
@@ -1974,7 +1975,7 @@ body .metric span{display:inline!important;white-space:nowrap}
   <div class="bm-row"><div><label for="bmMove">Lista</label><select id="bmMove">${COLS.map(c=>`<option ${c===colOf(p)?'selected':''}>${esc(c)}</option>`).join('')}</select></div><div><label for="bmResp">Responsável (etiqueta)</label><input id="bmResp" value="${esc(p.responsavel||'')}"></div></div>
   <div class="bm-sits"><strong>Situação</strong> <span class="help">(clique para marcar ou desmarcar)</span><div class="chips">${chipsFor(p)}</div><div class="bm-oth"><input id="bmOther" placeholder="Outra situação…" autocomplete="off"><button type="button" id="bmOtherAdd">＋ Adicionar</button></div></div>
   ${CHECKS.map(c=>{const arr=p.checklists[c.key],n=arr.filter(Boolean).length,pct=Math.round(n/arr.length*100);return `<section class="bm-check"><div class="bm-check-head"><strong>${esc(c.title)}</strong><span class="help">${n}/${arr.length}</span></div><div class="bm-bar"><i style="width:${pct}%"></i></div>${c.items.map((t,i)=>`<label class="bm-item ${arr[i]?'done':''}"><input type="checkbox" data-ck="${c.key}" data-i="${i}" ${arr[i]?'checked':''}> ${esc(t)}</label>`).join('')}</section>`}).join('')}
-  <div class="row bm-actions"><button type="button" id="bmCopy">📋 Copiar repasse</button><button type="button" data-action="edit" data-id="${esc(p.id)}">✎ Editar dados</button><button type="button" data-action="attach" data-id="${esc(p.id)}">📎 Anexos</button><button type="button" data-action="protocol-history" data-id="${esc(p.id)}">🕘 Histórico</button><button type="button" data-action="pdf-protocol" data-id="${esc(p.id)}">📑 PDF</button></div>`;
+  <div class="row bm-actions">${canFindProvider(p)?`<button type="button" class="primary" data-found="${esc(p.id)}">✔ Prestador localizado</button>`:''}<button type="button" id="bmCopy">📋 Copiar repasse</button><button type="button" data-action="edit" data-id="${esc(p.id)}">✎ Editar dados</button><button type="button" data-action="attach" data-id="${esc(p.id)}">📎 Anexos</button><button type="button" data-action="protocol-history" data-id="${esc(p.id)}">🕘 Histórico</button><button type="button" data-action="pdf-protocol" data-id="${esc(p.id)}">📑 PDF</button></div>`;
   g('boardModal').classList.remove('hidden');
  }
  function openModal(id){openId=id;renderModal()}
@@ -2784,6 +2785,90 @@ body .metric span{display:inline!important;white-space:nowrap}
  const tabBtn=document.querySelector('[data-tab="protecoes"]');
  if(tabBtn)tabBtn.addEventListener('click',()=>{renderList();if(!cur)select(selId||(prots()[0]&&prots()[0].id))});
  renderList();renderEditor();fillSuggestions();
+})();
+</script>
+
+<style>
+.bcard-act{width:100%;margin-top:8px;padding:7px 10px;font-size:12.5px}
+.ac-grid{display:grid;grid-template-columns:1fr 1fr;gap:4px 12px}.ac-grid .wide{grid-column:1/-1}
+.ac-grid label{display:block;margin:10px 0 4px}
+@media(max-width:600px){.ac-grid{grid-template-columns:1fr}}
+</style>
+<div id="achouModal" class="bm-back hidden" role="dialog" aria-modal="true"><form class="bm-box bm-form" id="achouForm" style="max-width:560px">
+ <div class="bm-head"><div><h2>✔ Prestador localizado</h2><p class="help" id="acSub"></p></div><button type="button" id="acCancel">✕</button></div>
+ <div class="ac-grid">
+  <div class="wide"><label for="acNome">Nome ou grupo do prestador *</label><input id="acNome" required autocomplete="off" placeholder="Ex.: Reboque Marcos ou Grupo ASJ Bases"></div>
+  <div><label for="acTel">Telefone (opcional)</label><input id="acTel" data-key="telefonePrestador" type="tel" maxlength="15" placeholder="DDD + número" autocomplete="off"></div>
+  <div><label for="acValor">Valor</label><input id="acValor" inputmode="decimal" placeholder="Ex.: 350,00" autocomplete="off"></div>
+  <div><label for="acPrevia">Prévia</label><input id="acPrevia" placeholder="Minutos (30) ou horário (14:30)" autocomplete="off"></div>
+  <div><label for="acForma">Forma de pagamento *</label><select id="acForma" required><option value="">Escolher…</option><option>À vista — origem</option><option>À vista — destino</option><option>Faturado</option><option>Após NF</option></select></div>
+ </div>
+ <div class="row" style="margin-top:16px"><button type="submit" class="primary">Salvar e enviar para “Prestador a Caminho”</button><button type="button" id="acCancel2">Cancelar</button></div>
+</form></div>
+<script>
+/* V61: "Prestador localizado" — dados do prestador e envio do cartão para "Prestador a Caminho". */
+(function(){
+ const g=id=>document.getElementById(id),modal=g('achouModal');
+ let curId=null;
+ const PAGTO={'À vista — origem':'À vista','À vista — destino':'À vista','Faturado':'Faturado','Após NF':'Emitir nota fiscal'};
+ const pad=n=>String(n).padStart(2,'0');
+ const fmtDT=d=>pad(d.getDate())+'/'+pad(d.getMonth()+1)+'/'+d.getFullYear()+' às '+pad(d.getHours())+':'+pad(d.getMinutes());
+ function fmtValor(v){
+  const t=String(v||'').trim();if(!t)return '';
+  if(/^\d+([.,]\d{1,2})?$/.test(t))return 'R$ '+Number(t.replace(',','.')).toFixed(2).replace('.',',');
+  return /^R\$/i.test(t)?t:t;
+ }
+ function parsePrevia(txt){
+  const t=String(txt||'').trim();if(!t)return null;
+  let m;
+  if(/^\d{1,3}$/.test(t)){const min=Number(t);return {minutes:min,at:new Date(Date.now()+min*60000)}}
+  if((m=t.match(/^(\d{1,2})\s*[:h]\s*(\d{2})$/))){
+   const d=new Date();d.setHours(Number(m[1]),Number(m[2]),0,0);
+   if(d.getTime()<Date.now()-3600000)d.setDate(d.getDate()+1);
+   return {minutes:Math.max(1,Math.round((d.getTime()-Date.now())/60000)),at:d};
+  }
+  return {text:t};
+ }
+ function open(id){
+  const p=db.protocols.find(x=>x.id===id);if(!p)return;
+  curId=id;g('achouForm').reset();
+  g('acSub').textContent='Protocolo '+p.numero+(p.associado?' · '+p.associado:'');
+  g('acNome').value=p.prestador||'';g('acTel').value=p.telefonePrestador||'';g('acValor').value=p.valor||'';
+  g('acPrevia').value='';if(p.formaPagamento)g('acForma').value=p.formaPagamento;
+  modal.classList.remove('hidden');g('acNome').focus();
+ }
+ const close=()=>{modal.classList.add('hidden');curId=null};
+ g('acCancel').onclick=g('acCancel2').onclick=close;
+ modal.addEventListener('click',e=>{if(e.target===modal)close()});
+ document.addEventListener('keydown',e=>{if(e.key==='Escape')close()});
+ // captura antes do clique que abriria o cartão
+ document.addEventListener('click',e=>{
+  const b=e.target.closest('[data-found]');if(!b)return;
+  e.stopPropagation();e.preventDefault();
+  if(window.closeBoardModal)window.closeBoardModal();
+  open(b.dataset.found);
+ },true);
+ g('achouForm').addEventListener('submit',e=>{
+  e.preventDefault();
+  const p=db.protocols.find(x=>x.id===curId);if(!p){close();return}
+  const nome=g('acNome').value.trim(),tel=g('acTel').value.trim(),forma=g('acForma').value;
+  if(!nome||!forma)return;
+  p.prestador=nome;if(/grupo/i.test(nome))p.whatsappPrestador=nome;
+  if(tel)p.telefonePrestador=tel;
+  p.valor=fmtValor(g('acValor').value)||p.valor||'';
+  p.formaPagamento=forma;p.faturamentoTask=PAGTO[forma];
+  const pv=parsePrevia(g('acPrevia').value);
+  if(pv&&pv.at){p.agenda=fmtDT(pv.at);p.providerEtaMinutes=pv.minutes;p.providerEtaDeadline=pv.at.toISOString()}
+  else if(pv&&pv.text){p.agenda=pv.text}
+  const sits=getSits(p).filter(x=>x!=='PROCURAR PRESTADOR'&&x!=='AGUARDANDO ENDEREÇO');
+  if(!sits.includes('PRESTADOR A CAMINHO'))sits.unshift('PRESTADOR A CAMINHO');
+  setSits(p,sits);
+  p.updatedAt=now();
+  log(p.id,p.numero,'Prestador localizado',[nome,tel,p.valor,forma,pv&&(pv.at?'prévia '+fmtDT(pv.at):pv.text)].filter(Boolean).join(' · '));
+  close();
+  boardMove(p,'Prestador a Caminho');
+  toast('✓ Prestador registrado. Cartão em “Prestador a Caminho”.');
+ });
 })();
 </script>
 
