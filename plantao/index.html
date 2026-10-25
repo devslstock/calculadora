@@ -547,7 +547,7 @@ body[data-theme] .protocol.has-suggestion{border-color:rgba(238,151,58,.82);box-
 </div>
 <header>
  <div class="brand"><div class="logo">P</div><div><h1>Plantão · Protocolos</h1><p>Controle de pendências, histórico e passagem de turno</p></div></div>
- <div class="header-quick no-print"><button id="headerImport" class="primary import-hero" type="button">＋ NOVO ATENDIMENTO <span>Nome, telefone, placa e motivo</span></button></div><div class="row no-print header-tools" style="max-width:620px"><button type="button" id="themeOpen" class="theme-mini">🎨 Temas</button><button id="exportCsvBtn">Exportar CSV</button><button id="exportBtn">Exportar backup</button><button id="importBackupBtn">Restaurar backup</button><input id="backupFile" type="file" accept=".json,application/json" class="hidden"></div>
+ <div class="header-quick no-print"><button id="headerImport" class="primary import-hero" type="button">＋ NOVO ATENDIMENTO <span>Nome, telefone, placa e motivo</span></button></div><div class="row no-print header-tools" style="max-width:620px"><button type="button" id="calcOpen" class="theme-mini">🧮 Calculadora</button><button type="button" id="themeOpen" class="theme-mini">🎨 Temas</button><button id="exportCsvBtn">Exportar CSV</button><button id="exportBtn">Exportar backup</button><button id="importBackupBtn">Restaurar backup</button><input id="backupFile" type="file" accept=".json,application/json" class="hidden"></div>
 </header>
 <main><div class="global-search-bar"><label for="globalLookup">⌕ Busca geral (inclui arquivados)</label><input id="globalLookup" placeholder="Protocolo, associado, telefone, placa, prestador..." autocomplete="off"><div id="globalResults" class="global-results hidden"></div></div>
  <nav class="tabs no-print">
@@ -2506,6 +2506,27 @@ body .metric span{display:inline!important;white-space:nowrap}
   }catch(e){console.error(e);showLogin(e.message||'');return}
   showLogin('');
  }
+})();
+</script>
+
+<style>
+.calc-box{background:var(--panel);color:var(--text);border:1px solid var(--line);border-radius:14px;width:min(560px,100%);height:calc(100vh - 56px);display:flex;flex-direction:column;overflow:hidden}
+.calc-head{display:flex;justify-content:space-between;align-items:center;padding:10px 14px;border-bottom:1px solid var(--line)}
+.calc-head strong{font-size:15px}
+#calcFrame{flex:1;width:100%;border:0;background:#fff}
+</style>
+<div id="calcModal" class="bm-back hidden" role="dialog" aria-modal="true" aria-label="Calculadora do prestador"><div class="calc-box"><div class="calc-head"><strong>🧮 Calculadora do prestador</strong><button type="button" id="calcClose">✕ Fechar</button></div><iframe id="calcFrame" title="Calculadora do prestador"></iframe></div></div>
+<script>
+/* V59: calculadora do prestador em popup (iframe). Online usa a página publicada; local usa calculadora.html. */
+(function(){
+ const g=id=>document.getElementById(id),modal=g('calcModal'),frame=g('calcFrame');
+ const src=computerOnline?'../':'calculadora.html';
+ const open=()=>{if(!frame.getAttribute('src'))frame.src=src;modal.classList.remove('hidden')};
+ const close=()=>modal.classList.add('hidden');
+ g('calcOpen').addEventListener('click',open);
+ g('calcClose').addEventListener('click',close);
+ modal.addEventListener('click',e=>{if(e.target===modal)close()});
+ document.addEventListener('keydown',e=>{if(e.key==='Escape'&&!modal.classList.contains('hidden'))close()});
 })();
 </script>
 
