@@ -932,7 +932,7 @@ document.addEventListener('click',e=>{const b=e.target.closest('button[data-acti
 $('search').oninput=render;$('filterStatus').onchange=render;$('filterAssoc').onchange=render;$('historySearch').oninput=renderHistory;
 function splitBlocks(text){let lines=text.replace(/\r/g,'').split('\n').map(normalizeMessageLine),blocks=[],cur=[];const start=/^\s*(?:📌\s*)?(?:\*?protocolo\*?|prot\.?)\s*[:#-]/i;for(const line of lines){if(start.test(line)&&cur.some(x=>x.trim())){
  let carry=[];
- while(cur.length&&(!cur[cur.length-1].trim()||/^\s*(?:AINDA\s+SEM\s+RETORNO|AGUARDANDO\s+RETORNO|REPASSE\s+PARA\s+ACOMPANHAR)\s*$/i.test(cur[cur.length-1]))){
+ while(cur.length&&(!cur[cur.length-1].trim()||/^\s*(?:AINDA\s+SEM\s+RETORNO|AGUARDANDO\s+RETORNO|(?:REPASSE\s+)?PARA\s+ACOMPANHAR|BUSCAR\s+PRESTADOR)\s*$/i.test(cur[cur.length-1]))){
   const last=cur.pop();if(last.trim())carry.unshift(last)
  }
  if(cur.some(x=>x.trim()))blocks.push(cur.join('\n').trim());cur=[...carry]
@@ -1022,7 +1022,7 @@ function parseBlock(block){
  if(!p.pendencias)p.pendencias=lines.filter(x=>/^(?:situa[cç][aã]o|orienta[cç][aã]o)\s*:/i.test(x)).map(x=>x.replace(/^[^:]+:\s*/,'')).join(' | ');
  if(!p.pendencias&&prestadorPendente)p.pendencias=prestadorPendente;
  if(!p.pendencias){
-   const instructions=lines.filter(x=>/\b(enviar|envio|anexar|marcar chegada|fotos finais|check-?list|finalizar|faturado|sem retorno|aguardando|aguardamos|retornar|acompanhar)\b/i.test(x)&&!/^(obs\.|observa)/i.test(x)&&!/^(?:prestador|associad[oa]|solicitante|mecânico|mecanico|serviço|servico)\s*[:\-–]/i.test(x)&&!/^repasse\s+para\s+acompanhar$/i.test(x));
+   const instructions=lines.filter(x=>/\b(enviar|envio|anexar|marcar chegada|fotos finais|check-?list|finalizar|faturado|sem retorno|aguardando|aguardamos|retornar|acompanhar)\b/i.test(x)&&!/^(obs\.|observa)/i.test(x)&&!/^(?:prestador|associad[oa]|solicitante|mecânico|mecanico|serviço|servico)\s*[:\-–]/i.test(x)&&!/^(?:repasse\s+)?para\s+acompanhar$|^buscar\s+prestador$/i.test(x));
    p.pendencias=instructions.slice(0,3).join(' | ');
    if(!p.pendencias&&/\b(sem retorno|aguardando retorno)\b/i.test(block))p.pendencias='Aguardando retorno / acompanhamento';
    if(!p.pendencias&&/\b(conversamos|informou|disse que|se encontra)\b/i.test(block))p.pendencias='Acompanhar atualização do atendimento; verificar próximas providências';
@@ -1853,21 +1853,39 @@ body .metric span{display:inline!important;white-space:nowrap}
   const cur=getSits(p),all=[...SITUACOES,...cur.filter(x=>!SITUACOES.includes(x))];
   return all.map(v=>`<button type="button" class="chip ${cur.includes(v)?'on':''}" data-sitchip="${esc(v)}" ${idx!==undefined?`data-pidx="${idx}"`:''}>${esc(v)}</button>`).join('');
  }
- function repasseLines(p){
+ function repasseLines(p,full){
   const L=[['PROTOCOLO',p.numero+(p.associacao?' - '+p.associacao:'')]];
-  if(p.associado||p.telefoneAssociado)L.push(['ASSOCIADO',[p.associado,p.telefoneAssociado].filter(Boolean).join(' - ')]);
+  if(full||p.associado||p.telefoneAssociado)L.push(['ASSOCIADO',[p.associado,p.telefoneAssociado].filter(Boolean).join(' - ')]);
   if(p.solicitante&&p.solicitante!==p.associado)L.push(['SOLICITANTE',[p.solicitante,p.telefoneSolicitante].filter(Boolean).join(' - ')]);
   const pc=[p.prestador,p.telefonePrestador||(p.whatsappPrestador&&p.whatsappPrestador!==p.prestador?p.whatsappPrestador:'')].filter(Boolean).join(' - ');
-  if(pc)L.push(['PRESTADOR',pc]);
+  if(full||pc)L.push(['PRESTADOR',pc]);
   L.push(['SITUAÇÃO',getSits(p).join(', ')]);
   return L;
  }
- const repasseText=p=>repasseLines(p).map(([k,v])=>k+': '+v).join('\n');
+ // ⚠️ BUSCAR PRESTADOR: ainda sem prestador definido; 📌 PARA ACOMPANHAR: atendimento em andamento.
+ const needsProvider=p=>{const s=getSits(p);return s.includes('PROCURAR PRESTADOR')||s.includes('AGUARDANDO ENDEREÇO')||colOf(p)==='Localizando Prestador'};
+ const repasseHeader=p=>needsProvider(p)?'⚠️ BUSCAR PRESTADOR':'📌 PARA ACOMPANHAR';
+ const SEP='----------------';
+ const repasseBlock=p=>SEP+'\n'+repasseHeader(p)+'\n\n'+repasseLines(p,true).map(([k,v])=>(k+': '+v).trimEnd()).join('\n');
+ const repasseText=p=>repasseBlock(p)+'\n'+SEP;
+ const repasseAll=list=>[...list].sort((a,b)=>needsProvider(b)-needsProvider(a)).map(repasseBlock).join('\n')+'\n'+SEP;
+ window.makeReport=function(){
+  const ps=db.protocols.filter(p=>colOf(p)&&colOf(p)!=='Finalizado');
+  const nome=id=>(document.getElementById(id)?.value||'').trim();
+  const obs=nome('shiftNotes');
+  let out='PASSAGEM DE TURNO — '+new Date().toLocaleString('pt-BR')+'\n';
+  if(nome('shiftName'))out+='ENTREGA: '+nome('shiftName')+'\n';
+  if(nome('nextName'))out+='RECEBE: '+nome('nextName')+'\n';
+  out+='EM ABERTO: '+ps.length+'\n\n';
+  out+=ps.length?repasseAll(ps):'Nenhum protocolo em aberto.';
+  if(obs)out+='\n\nOBSERVAÇÕES GERAIS\n'+obs;
+  return out;
+ };
  async function copyText(t){
   try{await navigator.clipboard.writeText(t);toast('✓ Repasse copiado.')}
   catch(e){const ta=document.createElement('textarea');ta.value=t;document.body.appendChild(ta);ta.select();try{document.execCommand('copy');toast('✓ Repasse copiado.')}catch(_){alert(t)}ta.remove()}
  }
- Object.assign(window,{SITUACOES,getSits,setSits,chipsFor,repasseText,repasseLines});
+ Object.assign(window,{SITUACOES,getSits,setSits,chipsFor,repasseText,repasseLines,repasseAll});
  const OPKEY='plantao_operador',STARTKEY='plantao_inicio_ok',OWNERKEY='plantao_board_owner';
  const TAGS=['#1f8a5b','#a35ccb','#2f7fc1','#c27a1a','#c0507a','#4f8f9b'];
  let openId=null;
@@ -1993,7 +2011,7 @@ body .metric span{display:inline!important;white-space:nowrap}
   if(e.target.value==='__me__'&&!operator())toast('Seu nome ainda não foi definido: informe-o em “Início do plantão” (recarregue a página) para filtrar os seus.');
   renderBoard();
  });
- g('boardCopy').onclick=()=>{const ps=db.protocols.filter(p=>colOf(p)&&colOf(p)!=='Finalizado');if(!ps.length){toast('Nenhum protocolo ativo para repassar.');return}copyText(ps.map(repasseText).join('\n\n---\n\n'))};
+ g('boardCopy').onclick=()=>{const ps=db.protocols.filter(p=>colOf(p)&&colOf(p)!=='Finalizado');if(!ps.length){toast('Nenhum protocolo ativo para repassar.');return}copyText(repasseAll(ps))};
 
  // --- novo atendimento
  function openNovo(){g('novoForm').reset();g('novoModal').classList.remove('hidden');g('nvNome').focus()}
@@ -2116,6 +2134,7 @@ body .metric span{display:inline!important;white-space:nowrap}
  g('parseBtn').addEventListener('click',()=>{
   if(!Array.isArray(pendingImport)||!pendingImport.length)return;
   for(const p of pendingImport){
+   if(!getSits(p).length&&/^\s*(?:⚠️?\s*)?BUSCAR\s+PRESTADOR\s*$/im.test(p.notas||''))setSits(p,['PROCURAR PRESTADOR']);
    if(!getSits(p).length){let a=inferSituacoes(p.pendencias);if(!a.length)a=oneRule(p.notas);setSits(p,a)}
    p._mesmo=sameContact(p);
    p.contatos=p.contatos||[];
