@@ -1791,6 +1791,11 @@ body .metric span{display:inline!important;white-space:nowrap}
 .bcol-body{display:flex;flex-direction:column;gap:8px;min-height:50px}
 .bcard{background:var(--panel);border:1px solid var(--line);border-radius:9px;padding:10px;cursor:pointer}
 .bcard:hover{border-color:var(--blue)}.bcard.dragging{opacity:.45}
+.bcard.lv5{border-color:#e0a800;background-image:linear-gradient(rgba(255,193,7,.20),rgba(255,193,7,.20))}
+.bcard.lv1{border-color:#ff8c00;border-width:2px;background-image:linear-gradient(rgba(255,120,0,.28),rgba(255,120,0,.28));animation:bcardPulse 1s ease-in-out infinite}
+.bcard.late{border-color:#dc3545;border-width:2px;background-image:linear-gradient(rgba(220,53,69,.30),rgba(220,53,69,.30))}
+@keyframes bcardPulse{50%{box-shadow:0 0 0 3px rgba(255,140,0,.45)}}
+@media(prefers-reduced-motion:reduce){.bcard.lv1{animation:none}}
 .bcard-title{font-weight:650;font-size:14px;overflow-wrap:anywhere}
 .bcard-tags{margin-bottom:6px;display:flex;gap:5px;flex-wrap:wrap}
 .btag{display:inline-block;font-size:11px;font-weight:700;color:#fff;border-radius:5px;padding:1px 8px}
@@ -1926,6 +1931,14 @@ body .metric span{display:inline!important;white-space:nowrap}
   else persist();
  }
 
+ function levelFor(p){
+  const ts=[];
+  if(p.dueAt)ts.push(Date.parse(p.dueAt));
+  if(p.providerEtaDeadline&&colOf(p)==='Prestador a Caminho')ts.push(Date.parse(p.providerEtaDeadline));
+  const ms=Math.min(...ts.filter(Number.isFinite).map(t=>t-Date.now()));
+  if(!Number.isFinite(ms))return '';
+  return ms<=0?'late':ms<=60000?'lv1':ms<=300000?'lv5':'';
+ }
  function dueText(iso){
   const ms=Date.parse(iso)-Date.now();
   if(!(ms>0))return {t:'⏱ VENCIDO',late:true};
@@ -1935,7 +1948,7 @@ body .metric span{display:inline!important;white-space:nowrap}
  function cardHtml(p){
   const d=p.dueAt?dueText(p.dueAt):null;
   const lines=repasseLines(p).map(([k,v])=>k==='SITUAÇÃO'?'':k==='PROTOCOLO'?`<div class="bcard-num">${esc(v)}</div>`:k==='ASSOCIADO'?`<div>${esc(v)}</div>`:`<div><b>${k}:</b> ${esc(v)}</div>`).join('')+(getSits(p).length?`<div class="bcard-sits">${getSits(p).map(x=>`<span class="bcard-sit">${esc(x)}</span>`).join('')}</div>`:'');
-  return `<article class="bcard" draggable="true" data-id="${esc(p.id)}">${p.responsavel?`<div class="bcard-tags"><span class="btag" style="background:${tagColor(p.responsavel)}">${esc(p.responsavel)}</span></div>`:''}<div class="bcard-lines">${lines}</div><div class="bcard-meta"><span>☑ ${doneCount(p)}/${TOTAL}</span>${p.dueAt?`<span class="bdue ${d.late?'late':''}" data-due="${esc(p.dueAt)}">${d.t}</span>`:''}${p.providerEtaDeadline&&colOf(p)==='Prestador a Caminho'?(()=>{const e=dueText(p.providerEtaDeadline);return `<span class="bdue ${e.late?'late':''}" data-due="${esc(p.providerEtaDeadline)}" data-ico="🚚" title="Prévia de chegada do prestador">${e.late?'🚚 PRÉVIA VENCIDA':e.t.replace('⏱','🚚')}</span>`})():''}</div>${canFindProvider(p)?`<button type="button" class="bcard-act primary" data-found="${esc(p.id)}">✔ Prestador localizado</button>`:''}${canArrive(p)?`<button type="button" class="bcard-act primary" data-arrived="${esc(p.id)}">📍 Marcar chegada</button>`:''}</article>`;
+  return `<article class="bcard ${levelFor(p)}" draggable="true" data-id="${esc(p.id)}">${p.responsavel?`<div class="bcard-tags"><span class="btag" style="background:${tagColor(p.responsavel)}">${esc(p.responsavel)}</span></div>`:''}<div class="bcard-lines">${lines}</div><div class="bcard-meta"><span>☑ ${doneCount(p)}/${TOTAL}</span>${p.dueAt?`<span class="bdue ${d.late?'late':''}" data-due="${esc(p.dueAt)}">${d.t}</span>`:''}${p.providerEtaDeadline&&colOf(p)==='Prestador a Caminho'?(()=>{const e=dueText(p.providerEtaDeadline);return `<span class="bdue ${e.late?'late':''}" data-due="${esc(p.providerEtaDeadline)}" data-ico="🚚" title="Prévia de chegada do prestador">${e.late?'🚚 PRÉVIA VENCIDA':e.t.replace('⏱','🚚')}</span>`})():''}</div>${canFindProvider(p)?`<button type="button" class="bcard-act primary" data-found="${esc(p.id)}">✔ Prestador localizado</button>`:''}${canArrive(p)?`<button type="button" class="bcard-act primary" data-arrived="${esc(p.id)}">📍 Marcar chegada</button>`:''}</article>`;
  }
  function renderBoard(){
   const host=g('boardHost');if(!host||typeof db==='undefined'||!db||!Array.isArray(db.protocols))return;
@@ -1960,6 +1973,12 @@ body .metric span{display:inline!important;white-space:nowrap}
   if(openId)renderModal();
  }
  function tick(){
+  document.querySelectorAll('#boardHost .bcard[data-id]').forEach(el=>{
+   const p=db.protocols.find(x=>x.id===el.dataset.id);if(!p)return;
+   const lv=levelFor(p);
+   ['lv5','lv1','late'].forEach(c=>{if(c!==lv&&el.classList.contains(c))el.classList.remove(c)});
+   if(lv&&!el.classList.contains(lv))el.classList.add(lv);
+  });
   document.querySelectorAll('.bdue[data-due]').forEach(el=>{const d=dueText(el.dataset.due),ico=el.dataset.ico;el.textContent=ico?(d.late?ico+' PRÉVIA VENCIDA':d.t.replace('⏱',ico)):d.t;el.classList.toggle('late',d.late)});
  }
 
