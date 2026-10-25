@@ -554,7 +554,7 @@ body[data-theme] .protocol.has-suggestion{border-color:rgba(238,151,58,.82);box-
   <button class="tab active" data-tab="quadro">▦ Quadro</button><button class="tab" data-tab="painel">☰ Lista</button><button class="tab" data-tab="importar">📥 Importar mensagens</button><button class="tab" data-tab="novo">＋ Novo protocolo</button><button class="tab" type="button" id="providerRegistryBtn">💳 Prestadores</button><button class="tab" data-tab="historico">Histórico</button><button class="tab" data-tab="passagem">Passagem de turno</button><button class="tab" data-tab="nuvem">☁ Nuvem / sincronização</button>
  </nav>
  <div class="archive-strip no-print"><span class="archive-caption">ARQUIVOS</span><button class="tab archive-tab" data-tab="faturados">✓ Finalizado Faturado <span id="billedTabCount"></span></button><button class="tab archive-tab" data-tab="concluidos">✓ Concluídos <span id="archiveTabCount"></span></button><button class="tab archive-tab" data-tab="repassados">↗ Repassados <span id="handoffTabCount"></span></button></div>
- <section id="quadro"><div class="panel"><div class="board-top"><h2>▦ Quadro de atendimentos</h2><div class="row"><input id="boardSearch" placeholder="Buscar protocolo, associado, placa…" autocomplete="off"><button type="button" id="boardCopy" title="Copia todos os protocolos ativos no formato de repasse">📋 Copiar repasse</button></div></div><div id="boardHost" class="board"></div></div></section>
+ <section id="quadro"><div class="panel"><div class="board-top"><h2>▦ Quadro de atendimentos</h2><div class="row"><select id="boardOwner" title="Filtrar por responsável" style="width:auto"></select><input id="boardSearch" placeholder="Buscar protocolo, associado, placa…" autocomplete="off"><button type="button" id="boardCopy" title="Copia todos os protocolos ativos no formato de repasse">📋 Copiar repasse</button></div></div><div id="boardHost" class="board"></div></div></section>
  <section id="painel" class="hidden">
   <div class="metrics">
    <button class="metric metric-button metric-total" type="button" data-metric-status="" title="Ver todos os protocolos ativos"><span>Total de protocolos</span><strong id="mTotal">0</strong><small>Na fila ativa ↗</small></button>
@@ -1866,7 +1866,7 @@ body .metric span{display:inline!important;white-space:nowrap}
   catch(e){const ta=document.createElement('textarea');ta.value=t;document.body.appendChild(ta);ta.select();try{document.execCommand('copy');toast('✓ Repasse copiado.')}catch(_){alert(t)}ta.remove()}
  }
  Object.assign(window,{SITUACOES,getSits,setSits,chipsFor,repasseText,repasseLines});
- const OPKEY='plantao_operador',STARTKEY='plantao_inicio_ok';
+ const OPKEY='plantao_operador',STARTKEY='plantao_inicio_ok',OWNERKEY='plantao_board_owner';
  const TAGS=['#1f8a5b','#a35ccb','#2f7fc1','#c27a1a','#c0507a','#4f8f9b'];
  let openId=null;
 
@@ -1918,9 +1918,15 @@ body .metric span{display:inline!important;white-space:nowrap}
  function renderBoard(){
   const host=g('boardHost');if(!host||typeof db==='undefined'||!db||!Array.isArray(db.protocols))return;
   const q=(g('boardSearch')?.value||'').trim().toLowerCase();
+  const sel=g('boardOwner'),me=operator().trim().toLowerCase();
+  let owner='';try{owner=localStorage.getItem(OWNERKEY)||''}catch(e){}
+  const names=[...new Set(db.protocols.map(p=>(p.responsavel||'').trim()).filter(Boolean))].sort((a,b)=>a.localeCompare(b));
+  sel.innerHTML='<option value="">Todos os protocolos</option><option value="__me__">👤 Só os meus'+(operator()?' ('+esc(operator())+')':'')+'</option><option value="__none__">Sem responsável</option>'+names.map(n=>`<option value="${esc(n)}">${esc(n)}</option>`).join('');
+  sel.value=owner;if(sel.value!==owner)owner='';
+  const ownerOk=p=>{const r=(p.responsavel||'').trim().toLowerCase();return !owner||(owner==='__me__'?(!!me&&r===me):owner==='__none__'?!r:r===owner.toLowerCase())};
   const groups=Object.fromEntries(COLS.map(c=>[c,[]]));
   for(const p of db.protocols){
-   const c=colOf(p);if(!c)continue;
+   const c=colOf(p);if(!c||!ownerOk(p))continue;
    if(q&&![p.numero,p.associado,p.solicitante,p.prestador,p.placa,p.motivo,p.responsavel].some(v=>String(v||'').toLowerCase().includes(q)))continue;
    groups[c].push(p);
   }
@@ -1979,6 +1985,11 @@ body .metric span{display:inline!important;white-space:nowrap}
   const rm=e.target.closest('[data-rmc]');if(rm){(p.contatos||[]).splice(Number(rm.dataset.rmc),1);p.updatedAt=now();persist()}
  });
  g('boardSearch').addEventListener('input',renderBoard);
+ g('boardOwner').addEventListener('change',e=>{
+  try{localStorage.setItem(OWNERKEY,e.target.value)}catch(err){}
+  if(e.target.value==='__me__'&&!operator())toast('Seu nome ainda não foi definido: informe-o em “Início do plantão” (recarregue a página) para filtrar os seus.');
+  renderBoard();
+ });
  g('boardCopy').onclick=()=>{const ps=db.protocols.filter(p=>colOf(p)&&colOf(p)!=='Finalizado');if(!ps.length){toast('Nenhum protocolo ativo para repassar.');return}copyText(ps.map(repasseText).join('\n\n---\n\n'))};
 
  // --- novo atendimento
